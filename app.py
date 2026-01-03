@@ -644,7 +644,7 @@ def build_stat_tables(stats: dict):
     return atk_df, crit_df, common_df, skill_df, strike_df
 
 # =====================================================
-# ✅ 추가: 장비 선택 모드/장비 위젯 키 (쿠키별 분리)
+#  추가: 장비 선택 모드/장비 위젯 키 (쿠키별 분리)
 # =====================================================
 def mode_key(kind: str) -> str:
     return f"mode_widget__{kind}"
@@ -668,7 +668,7 @@ if "best_kind" not in st.session_state:
 if "last_run" not in st.session_state:
     st.session_state.last_run = None
 
-# ✅ 추가: 장비 선택 모드/장비 저장용
+#  추가: 장비 선택 모드/장비 저장용
 if "mode" not in st.session_state:
     st.session_state.mode = "최적(자동)"
 if "equip" not in st.session_state:
@@ -730,7 +730,7 @@ with left_col:
             st.session_state.best_kind = None
             st.session_state.last_run = None
 
-            # ✅ 쿠키 바뀌면 장비 선택 모드/장비도 기본값으로 리셋
+            #  쿠키 바뀌면 장비 선택 모드/장비도 기본값으로 리셋
             st.session_state.mode = "최적(자동)"
             st.session_state.equip = ""
 
@@ -740,7 +740,7 @@ with left_col:
             st.session_state[party1_key(k2)] = "없음"
             st.session_state[party2_key(k2)] = "없음"
 
-            # ✅ 쿠키별 위젯 키도 리셋
+            #  쿠키별 위젯 키도 리셋
             st.session_state[mode_key(k2)] = "최적(자동)"
             st.session_state[equip_key(k2)] = ""
 
@@ -754,7 +754,7 @@ with left_col:
         ek = equip_key(k)
 
         # =====================================================
-        # ✅ 추가: 장비 선택 모드(최적/선택) + 선택 장비 선택 모드일 때 장비 선택
+        #  추가: 장비 선택 모드(최적/선택) + 선택 장비 선택 모드일 때 장비 선택
         # =====================================================
         st.markdown('<div class="ctl-label">장비 선택 장비 선택 모드</div>', unsafe_allow_html=True)
 
@@ -809,8 +809,12 @@ with left_col:
 
         elif cookie == "멜랑크림 쿠키":
             seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")] or [""]
-            if st.session_state.get(sk, "") not in seaz_options:
-                st.session_state[sk] = seaz_options[0]
+
+            PREFERRED_SEAZ = "바닐라몬드:추격자의 결의"
+
+            cur = st.session_state.get(sk, "")
+            if (not cur) or (cur not in seaz_options):
+                st.session_state[sk] = PREFERRED_SEAZ if PREFERRED_SEAZ in seaz_options else seaz_options[0]
 
             seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
             st.session_state.seaz = seaz
@@ -881,7 +885,7 @@ with left_col:
                 p = max(0.0, min(1.0, float(p)))
                 progress_slot.markdown(_progress_html(int(p * 100)), unsafe_allow_html=True)
 
-            # ✅ 장비 선택 모드에 따른 장비 override
+            #  장비 선택 모드에 따른 장비 override
             equip_override_local = None
             if st.session_state.mode == "선택(수동)":
                 equip_override_local = st.session_state.equip or None
@@ -892,7 +896,7 @@ with left_col:
                     party=st.session_state.party,
                     step=STEP_FIXED,
                     progress_cb=cb,
-                    equip_override=equip_override_local,   # ✅ 추가 (sim도 수정 필요)
+                    equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
                 )
                 best_kind = "wind"
 
@@ -902,7 +906,7 @@ with left_col:
                     party=st.session_state.party,
                     step=STEP_FIXED,
                     progress_cb=cb,
-                    equip_override=equip_override_local,   # ✅ 추가 (sim도 수정 필요)
+                    equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
                 )
                 best_kind = "melan"
 
@@ -965,7 +969,7 @@ with right_col:
 
                     rows = []
                     if kind in ("wind", "melan"):
-                        add(rows, "장비 선택 모드", st.session_state.mode)  # ✅ 추가
+                        add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
                         # 선택(수동)일 때 사용자가 고른 장비도 같이 표시(참고)
                         if st.session_state.mode == "선택(수동)":
                             add(rows, "선택 장비", st.session_state.equip or "")
@@ -976,7 +980,7 @@ with right_col:
                         add(rows, "아티팩트", best.get("artifact", ""))
                         add(rows, "파티", party_txt)
                     else:
-                        add(rows, "장비 선택 모드", st.session_state.mode)  # ✅ 추가
+                        add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
                         add(rows, "쿠키", "이슬맛 쿠키")
                         add(rows, "장비", best.get("equip_fixed", ""))
                         add(rows, "시즈나이트", best.get("seaz_fixed", getattr(sim, "FIXED_SEAZ_ISLE", "")))
