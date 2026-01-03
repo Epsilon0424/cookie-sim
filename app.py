@@ -108,6 +108,22 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{
   align-items: center !important;
 }
 
+/* selectbox 흰 테두리(기본 border/포커스 링) 제거 */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;   /* 포커스 링/테두리 느낌 제거 */
+}
+
+/* 포커스/클릭/hover 때도 다시 생기지 않게 */
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
+div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover{
+  border: 0 !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 /* 내부 combobox도 높이/정렬 맞추기 */
 div[data-testid="stSelectbox"] div[role="combobox"]{
   min-height: var(--SEL_H) !important;
