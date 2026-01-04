@@ -15,7 +15,14 @@ st.markdown(
    Base
 ===================================================== */
 html, body, [data-testid="stAppViewContainer"]{
-  background: #f3f4f6 !important;
+  background: #f3f4f6;
+}
+
+/* 카드 배경(흰색 유지) */
+div[data-testid="stVerticalBlockBorderWrapper"] > div,
+div[data-testid="stBorderedContainer"] > div{
+  background: #ffffff !important;
+  border-radius: 16px !important;
 }
 
 /* Main container */
@@ -59,6 +66,11 @@ div[data-testid="stVerticalBlockBorderWrapper"]{
 .h-sub{
   font-size: 12px;
   color: #6b7280;
+  margin: 0 0 0px 0;
+}
+.h-meta{
+  font-size: 12px;
+  color: #6b7280;
   margin: 0 0 14px 0;
 }
 
@@ -84,14 +96,13 @@ button[data-baseweb="tab"]{
   margin: 10px 0 6px 0;
 }
 
-/* === 여기 3개만 건드리면 UI 톤이 바로 바뀜 === */
 :root{
   --SEL_H: 30px;          /* 선택박스 높이 */
   --SEL_FONT: 13px;       /* 닫힌 상태 값(멜랑크림 쿠키 등) 폰트 */
   --MENU_FONT: 13px;      /* 펼친 옵션 폰트 */
 
   /* 탭 메뉴 아래 간격 통일 */
-  --TAB_GAP: 8px;         /* 6~12px 사이로 취향껏 */
+  --TAB_GAP: 10px;
 }
 
 /* 닫힌 상태: select 컨테이너(바깥 박스) */
@@ -361,6 +372,17 @@ div[data-testid="stMarkdownContainer"] hr.u-divider{
   padding-top: -5px;      /* 버튼과 바 사이 간격 */
   padding-bottom: 20px;   /* 바와 카드 바닥 간격 (겹침 방지) */
 }
+
+:root{
+  --accent: #ff3434;
+  --accent-soft: rgba(255,52,52,0.10);
+}
+
+/* 테이블 헤더 밑줄 */
+thead tr th{
+  border-bottom: 2px solid rgba(255,52,52,0.18) !important;
+}
+
 </style>
 """,
 unsafe_allow_html=True,
@@ -694,6 +716,7 @@ def party2_key(kind: str) -> str:
 # =====================================================
 st.markdown('<div class="h-title">쿠키 최적화 시뮬레이터</div>', unsafe_allow_html=True)
 st.markdown('<div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>', unsafe_allow_html=True)
+st.markdown('<div class="h-meta">기타 문의는 Epsilon24@gmail.com으로 주세요</div>', unsafe_allow_html=True)
 
 # =====================================================
 # 레이아웃: 좌/우
@@ -941,7 +964,7 @@ with right_col:
         kind = st.session_state.best_kind
 
         if not best:
-            st.caption("좌측에서 설정 후 실행하면 결과가 표시됩니다.")
+            st.caption("설정 후 실행하면 결과가 표시됩니다.")
         else:
             if kind in ("wind", "melan"):
                 c1, c2, c3 = st.columns(3, gap="small")
