@@ -1045,7 +1045,7 @@ def melan_damage_for_token(
     if token == "B4":
         coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
 
-        # ✅ 프리마 상태 기본공격은 패시브 피해 취급
+        # 프리마 상태 기본공격은 패시브 피해 취급
         mult_type = "passive" if is_prima else "basic"
 
         dmg = 0.0
@@ -1061,7 +1061,7 @@ def melan_damage_for_token(
 
     if token == "S":
         if is_prima:
-            # ✅ 프리마 상태 S는 패시브 피해 취급
+            # 프리마 상태 S는 패시브 피해 취급
             coeff = MELAN_SPECIAL_PRIMA_AS_PASSIVE_COEFF
             dmg = unit * coeff * skill_bonus_mult(stats, "passive")
             b["passive"] = dmg
@@ -1074,7 +1074,7 @@ def melan_damage_for_token(
 
     if token == "U":
         if is_transform_ult:
-            # ✅ 프리마돈나 돌입 피해는 패시브 피해 취급
+            # 프리마돈나 돌입 피해는 패시브 피해 취급
             entry = unit * PRIMA_ENTRY_COEFF * skill_bonus_mult(stats, "passive")
             b["passive"] = entry
             return entry, MELAN_TIME["U"], True, b
@@ -1112,7 +1112,7 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
         for tier in (0.25, 0.50, 0.75):
             if prev + eps < tier <= new + eps:
                 coeff = PASSIVE_TIER_COEFF.get(tier, 0.0)
-                # ✅ 언데드/멜랑노바/종말의 도래 = 패시브 피해
+                # 언데드/멜랑노바/종말의 도래 = 패시브 피해
                 pdmg += unit * coeff * skill_bonus_mult(stats, "passive")
         return pdmg
 
@@ -1153,7 +1153,7 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
             coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
             total_time += MELAN_TIME["B4"]
 
-            # ✅ 프리마 기본공격 = 패시브 배율
+            # 프리마 기본공격 = 패시브 배율
             mult_type = "passive" if is_prima else "basic"
 
             for c in coeffs:
