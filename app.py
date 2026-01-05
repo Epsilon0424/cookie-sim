@@ -12,17 +12,47 @@ st.markdown(
 """
 <style>
 /* =====================================================
-   Base
+   0) Variables (색/간격/그림자)
 ===================================================== */
-html, body, [data-testid="stAppViewContainer"]{
-  background: #f3f4f6;
+:root{
+  /* Page */
+  --PAGE_BG: #f3f4f6;
+
+  /* Outer shell */
+  --SHELL_BG: #f9fafb;              /* 더 회색: #f1f5f9 / 더 밝게: #fafafa */
+  --SHELL_RADIUS: 16px;
+  --SHELL_SHADOW: 0 8px 24px rgba(0,0,0,0.06);
+
+  /* Panels (선택/결과) */
+  --PANEL_BG: #f3f4f6;
+  --PANEL_BORDER: #eef2f7;
+  --PANEL_RADIUS: 14px;
+  --PANEL_PAD: 18px;
+
+  /* Cards (기본 border=True 카드들) */
+  --CARD_BG: #ffffff;
+  --CARD_RADIUS: 14px;
+  --CARD_SHADOW: 0 8px 24px rgba(0,0,0,0.06);
+
+  /* Selectbox */
+  --SEL_H: 30px;
+  --SEL_FONT: 13px;
+  --MENU_FONT: 13px;
+
+  /* Layout */
+  --COL_GAP: 1.0rem;
+  --TAB_GAP: 10px;
+
+  /* Accent */
+  --accent: #ff3434;
+  --accent-soft: rgba(255,52,52,0.10);
 }
 
-/* 카드 배경(흰색 유지) */
-div[data-testid="stVerticalBlockBorderWrapper"] > div,
-div[data-testid="stBorderedContainer"] > div{
-  background: #ffffff !important;
-  border-radius: 16px !important;
+/* =====================================================
+   1) Page base
+===================================================== */
+html, body, [data-testid="stAppViewContainer"]{
+  background: var(--PAGE_BG) !important;
 }
 
 /* Main container */
@@ -43,21 +73,68 @@ header[data-testid="stHeader"]{
   background: transparent !important;
 }
 
-/* columns gap */
+/* =====================================================
+   2) Outer shell (전체 큰 배경 박스)
+===================================================== */
+.st-key-outer_shell{
+  background: var(--SHELL_BG) !important;
+  border: 0 !important;
+  border-radius: var(--SHELL_RADIUS) !important;
+  box-shadow: var(--SHELL_SHADOW) !important;
+  padding: 18px !important;
+}
+
+/* outer 내부는 카드화 방지 */
+.st-key-outer_shell > div{
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* =====================================================
+   3) Layout columns (좌/우 정렬 + 간격)
+===================================================== */
 div[data-testid="stHorizontalBlock"]{
-  gap: 0.65rem !important;
+  gap: var(--COL_GAP) !important;
+  align-items: flex-start !important;
 }
 
-/* st.container(border=True) card */
+/* =====================================================
+   4) Default cards (border=True 컨테이너 공통)
+   - panel_select / panel_result 는 별도로 처리
+===================================================== */
 div[data-testid="stVerticalBlockBorderWrapper"]{
-  background: #ffffff !important;
+  background: var(--CARD_BG) !important;
   border: none !important;
-  border-radius: 14px !important;
-  box-shadow: 0 8px 24px rgba(0,0,0,0.06);
-  padding: 18px 18px 14px 18px;
+  border-radius: var(--CARD_RADIUS) !important;
+  box-shadow: var(--CARD_SHADOW) !important;
+  padding: 18px 18px 14px 18px !important;
 }
 
-/* Typography */
+/* panel_select/result는 카드 스타일 제외 */
+.st-key-panel_select,
+.st-key-panel_result{
+  background: var(--PANEL_BG) !important;
+  border: 1px solid var(--PANEL_BORDER) !important;
+  border-radius: var(--PANEL_RADIUS) !important;
+  box-shadow: none !important;
+  padding: var(--PANEL_PAD) !important;
+}
+
+/* panel 내부 흰색 덮임 방지 */
+.st-key-panel_select > div,
+.st-key-panel_result > div{
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+/* =====================================================
+   5) Typography
+===================================================== */
 .h-title{
   font-size: 18px;
   font-weight: 800;
@@ -73,22 +150,27 @@ div[data-testid="stVerticalBlockBorderWrapper"]{
   color: #6b7280;
   margin: 0 0 14px 0;
 }
-
-/* metric */
 div[data-testid="stMetricValue"]{
   font-size: 20px;
 }
-
-/* tabs */
-button[data-baseweb="tab"]{
-  font-size: 13px !important;
+:root{
+  --TAB_FONT: 13px;
+  --TAB_WEIGHT: 750;
+}
+div[data-testid="stTabs"] button[data-baseweb="tab"],
+div[data-testid="stTabs"] button[data-baseweb="tab"] *{
+  font-size: var(--TAB_FONT) !important;
+  font-weight: var(--TAB_WEIGHT) !important;
+}
+/* caption */
+[data-testid="stCaptionContainer"]{
+  font-size: 12px !important;
+  line-height: 1.4 !important;
 }
 
 /* =====================================================
-선택 UI (라벨 크게 / 값 작게 / 박스 높이 / 배경 진회색)
+   6) Select UI
 ===================================================== */
-
-/* 라벨(쿠키/시즈나이트/파티) */
 .ctl-label{
   font-size: 14px !important;
   font-weight: 800 !important;
@@ -96,37 +178,21 @@ button[data-baseweb="tab"]{
   margin: 10px 0 6px 0;
 }
 
-:root{
-  --SEL_H: 30px;          /* 선택박스 높이 */
-  --SEL_FONT: 13px;       /* 닫힌 상태 값(멜랑크림 쿠키 등) 폰트 */
-  --MENU_FONT: 13px;      /* 펼친 옵션 폰트 */
-
-  /* 탭 메뉴 아래 간격 통일 */
-  --TAB_GAP: 10px;
-}
-
-/* 닫힌 상태: select 컨테이너(바깥 박스) */
+/* 닫힌 상태 select 박스 */
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{
   min-height: var(--SEL_H) !important;
   height: var(--SEL_H) !important;
   padding-top: 0 !important;
   padding-bottom: 0 !important;
-
-  background: #e5e7eb !important;        /* 조금 진한 회색 */
+  background: #e5e7eb !important;
+  border: 0 !important;
+  outline: none !important;
   box-shadow: none !important;
-
   display: flex !important;
   align-items: center !important;
 }
 
-/* selectbox 흰 테두리(기본 border/포커스 링) 제거 */
-div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{
-  border: 0 !important;
-  outline: none !important;
-  box-shadow: none !important;   /* 포커스 링/테두리 느낌 제거 */
-}
-
-/* 포커스/클릭/hover 때도 다시 생기지 않게 */
+/* hover/focus 링 제거 */
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus,
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover{
@@ -135,7 +201,6 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover{
   box-shadow: none !important;
 }
 
-/* 내부 combobox도 높이/정렬 맞추기 */
 div[data-testid="stSelectbox"] div[role="combobox"]{
   min-height: var(--SEL_H) !important;
   height: var(--SEL_H) !important;
@@ -146,7 +211,6 @@ div[data-testid="stSelectbox"] div[role="combobox"]{
   background: transparent !important;
 }
 
-/* 닫힌 상태 값 폰트: "전체를" 내려서 무조건 먹게 만들기 */
 div[data-testid="stSelectbox"] div[data-baseweb="select"]{
   font-size: var(--SEL_FONT) !important;
 }
@@ -155,22 +219,36 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] *{
   line-height: 1.5 !important;
 }
 
-/* =====================================================
-드롭다운(펼친 옵션 목록) 폰트
-===================================================== */
+/* 드롭다운 옵션 폰트 */
 div[data-baseweb="menu"] *,
 [role="listbox"] *,
 li[role="option"]{
   font-size: var(--MENU_FONT) !important;
 }
-
-/* (선택) 옵션 hover 배경 */
 li[role="option"]:hover{
   background: #f1f5f9 !important;
 }
 
+/* Party(파티 슬롯 1/2) 간격 줄이기 */
+:root{ --PARTY_GAP: -5px; }
+
+.st-key-party_group div[data-testid="stElementContainer"]{
+  margin-bottom: var(--PARTY_GAP) !important;
+}
+.st-key-party_group div[data-testid="stElementContainer"]:last-child{
+  margin-bottom: 0 !important;
+}
+
+/* 버전에 따라 selectbox 자체에 margin이 잡히는 경우 대비 */
+.st-key-party_group div[data-testid="stSelectbox"]{
+  margin-bottom: var(--PARTY_GAP) !important;
+}
+.st-key-party_group div[data-testid="stSelectbox"]:last-of-type{
+  margin-bottom: 0 !important;
+}
+
 /* =====================================================
-   버튼 톤
+   7) Buttons
 ===================================================== */
 .stButton > button[kind="primary"]{
   border-radius: 12px;
@@ -198,25 +276,14 @@ li[role="option"]:hover{
 }
 
 /* =====================================================
-   라벨(pill) + 테이블 카드(끝-끝 맞춤)
+   8) Divider + Tabs spacing
 ===================================================== */
-.stat-wrap{
-  margin: 0px 0 14px 0;   /* 위쪽 여백 제거 */
+div[data-testid="stMarkdownContainer"] hr.u-divider{
+  border: none !important;
+  border-top: 1px solid #e5e7eb !important;
+  margin-top: -4px !important;
+  margin-bottom: 12px !important;
 }
-
-/* stat-grid 탭별로 따로 margin 주지 말고 0으로 통일 */
-.stat-grid{ margin-top: 0 !important; }
-
-/* summary-grid도 0으로 통일(탭 패널이 gap을 관리) */
-.summary-grid{
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-  align-items: start;
-  margin-top: 0 !important;
-}
-
-/* 탭 패널 상단 여백을 변수로 통일 */
 div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{
   padding-top: var(--TAB_GAP) !important;
 }
@@ -225,36 +292,34 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
   padding-top: 0 !important;
 }
 
-/* 잘못된 규칙(단위 없는 8) 제거/정상화 */
-div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .stat-pill{
-  margin-top: 0 !important;
-}
-
+/* =====================================================
+   9) Tables / pills (너의 커스텀 UI)
+===================================================== */
+.stat-wrap{ margin: 0px 0 14px 0; }
 .stat-pill{
   display: block;
   width: 100%;
   box-sizing: border-box;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 1px solid #f1f5f9;
   border-radius: 12px;
   padding: 10px 12px;
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 700;
   line-height: 1.2;
   color: #111827;
   box-shadow: 0 4px 10px rgba(0,0,0,0.06);
   margin: 0 0 8px 0;
 }
 
-/* table */
-:root{ --ROW_H: 38px; --CELL_PX: 12px; }
+:root{ --ROW_H: 32px; --CELL_PX: 12px; }
 .u-table{
   width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
   background: #ffffff;
-  border: 1px solid #e5e7eb;
+  border: 0.5px solid #e5e7eb;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: 0 6px 16px rgba(0,0,0,0.03);
@@ -280,31 +345,21 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .stat-pill{
 .u-table tbody td{ border-bottom: 1px solid #eef2f7; }
 .u-table tbody tr:last-child td{ border-bottom: none; }
 .u-table.small thead th,
-.u-table.small tbody td{ font-size: 11.5px; }
+.u-table.small tbody td{ font-size: 12px; }
 .u-empty{ font-size: 12px; color: #6b7280; padding: 10px 2px 0 2px; }
 
-/* grid */
-.stat-grid{
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.65rem;
-  align-items: start;
-}
-.stat-grid .stat-wrap{ margin: 0 !important; }
-@media (max-width: 980px){
-  .stat-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .stat-grid .span-2{ grid-column: 1 / -1; }
-}
-@media (max-width: 640px){
-  .stat-grid{ grid-template-columns: 1fr; }
-  .stat-grid .span-2{ grid-column: auto; }
+/* 테이블 헤더 밑줄(강조) */
+thead tr th{
+  border-bottom: 2px solid rgba(255,52,52,0.18) !important;
 }
 
-/* progress */
+/* =====================================================
+   10) Progress bar
+===================================================== */
 .prog-wrap{
   width: 100%;
   height: 18px;
-  border-radius: 999px;
+  border-radius: 5px;
   background: #f1f5f9;
   border: 1px solid #e5e7eb;
   overflow: hidden;
@@ -314,7 +369,7 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .stat-pill{
 .prog-bar{
   height: 100%;
   width: 0%;
-  background: #ff4b4b;
+  background: #4b5563;
   transition: width 120ms ease;
 }
 .prog-text{
@@ -330,59 +385,44 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] .stat-pill{
   text-shadow: 0 1px 2px rgba(0,0,0,0.25);
   user-select: none;
 }
-.prog-sub{
-  margin-top: 8px;
-  font-size: 11px;
-  color: #6b7280;
-}
-
-/* 중간 화면: 2열 + 마지막 카드만 한줄 전체 */
-@media (max-width: 980px){
-  .summary-grid{
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-  .summary-grid .md-span-2{
-    grid-column: 1 / -1;
-  }
-}
-
-/* 작은 화면: 1열(세로 3개) */
-@media (max-width: 640px){
-  .summary-grid{
-    grid-template-columns: 1fr;
-  }
-  .summary-grid .md-span-2{
-    grid-column: auto;
-  }
-}
-div[data-testid="stMarkdownContainer"] hr.u-divider{
-  border: none !important;
-  border-top: 1px solid #e5e7eb !important;
-
-  margin-top: -4px !important;
-  margin-bottom: 12px !important;
-}
-
-/* 실행 버튼 아래에 항상 공간 확보 */
-.prog-slot{
-  margin-top: 30px;
-  height: 20px;
-}
 .prog-area{
-  padding-top: -5px;      /* 버튼과 바 사이 간격 */
-  padding-bottom: 20px;   /* 바와 카드 바닥 간격 (겹침 방지) */
+  padding-top: -5px;
+  padding-bottom: 20px;
 }
 
-:root{
-  --accent: #ff3434;
-  --accent-soft: rgba(255,52,52,0.10);
+/* =====================================================
+   11) Responsive grids (summary/stat)
+===================================================== */
+.summary-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  align-items: start;
+  margin-top: 0 !important;
 }
-
-/* 테이블 헤더 밑줄 */
-thead tr th{
-  border-bottom: 2px solid rgba(255,52,52,0.18) !important;
+.stat-grid{
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.65rem;
+  align-items: start;
+  margin-top: 0 !important;
 }
+.stat-grid .stat-wrap{ margin: 0 !important; }
 
+@media (max-width: 980px){
+  .summary-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .summary-grid .md-span-2{ grid-column: 1 / -1; }
+
+  .stat-grid{ grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .stat-grid .span-2{ grid-column: 1 / -1; }
+}
+@media (max-width: 640px){
+  .summary-grid{ grid-template-columns: 1fr; }
+  .summary-grid .md-span-2{ grid-column: auto; }
+
+  .stat-grid{ grid-template-columns: 1fr; }
+  .stat-grid .span-2{ grid-column: auto; }
+}
 </style>
 """,
 unsafe_allow_html=True,
@@ -507,7 +547,7 @@ def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df):
     st.markdown(html, unsafe_allow_html=True)
 
 # =====================================================
-# 요약표(잠재/조각): 1 이상만 표시
+# 요약표(잠재/조각)
 # =====================================================
 def pretty_potentials(pot: dict) -> pd.DataFrame:
     rows = []
@@ -721,337 +761,341 @@ st.markdown('<div class="h-meta">기타 문의는 Epsilon24@gmail.com으로 주�
 # =====================================================
 # 레이아웃: 좌/우
 # =====================================================
-left_col, right_col = st.columns([0.8, 2.4], gap="small")
+with st.container(key="outer_shell", border=False):
+    left_col, right_col = st.columns([0.8, 2.4], gap="small")
 
-# =====================================================
-# 좌측: 선택
-# =====================================================
-with left_col:
-    with st.container(border=True):
-        st.markdown('<div class="h-title">선택</div>', unsafe_allow_html=True)
 
-        st.markdown('<div class="ctl-label">쿠키</div>', unsafe_allow_html=True)
-        cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "이슬맛 쿠키"]
+    # =====================================================
+    # 좌측: 선택
+    # =====================================================
+    with left_col:
+        with st.container(key="panel_select", border=True):
+            st.markdown('<div class="h-title">선택</div>', unsafe_allow_html=True)
 
-        if "cookie_widget" not in st.session_state:
-            st.session_state.cookie_widget = st.session_state.cookie
+            st.markdown('<div class="ctl-label">쿠키</div>', unsafe_allow_html=True)
+            cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "이슬맛 쿠키"]
 
-        cookie = st.selectbox(
-            "쿠키",
-            cookie_options,
-            label_visibility="collapsed",
-            key="cookie_widget",
-        )
+            if "cookie_widget" not in st.session_state:
+                st.session_state.cookie_widget = st.session_state.cookie
 
-        if cookie != st.session_state._cookie_prev:
-            st.session_state.cookie = cookie
-            st.session_state._cookie_prev = cookie
+            cookie = st.selectbox(
+                "쿠키",
+                cookie_options,
+                label_visibility="collapsed",
+                key="cookie_widget",
+            )
 
-            st.session_state.seaz = ""
-            st.session_state.party = []
-            st.session_state.best = None
-            st.session_state.best_kind = None
-            st.session_state.last_run = None
+            if cookie != st.session_state._cookie_prev:
+                st.session_state.cookie = cookie
+                st.session_state._cookie_prev = cookie
 
-            #  쿠키 바뀌면 장비 선택 모드/장비도 기본값으로 리셋
-            st.session_state.mode = "최적(자동)"
-            st.session_state.equip = ""
+                st.session_state.seaz = ""
+                st.session_state.party = []
+                st.session_state.best = None
+                st.session_state.best_kind = None
+                st.session_state.last_run = None
 
-            k2 = kind_of(cookie)
-            st.session_state[seaz_key(k2)] = ""
+                #  쿠키 바뀌면 장비 선택 모드/장비도 기본값으로 리셋
+                st.session_state.mode = "최적(자동)"
+                st.session_state.equip = ""
 
-            st.session_state[party1_key(k2)] = "없음"
-            st.session_state[party2_key(k2)] = "없음"
+                k2 = kind_of(cookie)
+                st.session_state[seaz_key(k2)] = ""
 
-            #  쿠키별 위젯 키도 리셋
-            st.session_state[mode_key(k2)] = "최적(자동)"
-            st.session_state[equip_key(k2)] = ""
+                st.session_state[party1_key(k2)] = "없음"
+                st.session_state[party2_key(k2)] = "없음"
 
-            st.rerun()
+                #  쿠키별 위젯 키도 리셋
+                st.session_state[mode_key(k2)] = "최적(자동)"
+                st.session_state[equip_key(k2)] = ""
 
-        k = kind_of(cookie)
-        sk = seaz_key(k)
-        p1k = party1_key(k)
-        p2k = party2_key(k)
-        mk = mode_key(k)
-        ek = equip_key(k)
+                st.rerun()
 
-        # =====================================================
-        #  추가: 장비 선택 모드(최적/선택) + 선택 장비 선택 모드일 때 장비 선택
-        # =====================================================
-        st.markdown('<div class="ctl-label">장비 선택 장비 선택 모드</div>', unsafe_allow_html=True)
+            k = kind_of(cookie)
+            sk = seaz_key(k)
+            p1k = party1_key(k)
+            p2k = party2_key(k)
+            mk = mode_key(k)
+            ek = equip_key(k)
 
-        mode_opts = ["최적(자동)", "선택(수동)"]
-        if st.session_state.get(mk, "") not in mode_opts:
-            st.session_state[mk] = mode_opts[0]
+            # =====================================================
+            #  추가: 장비 선택 모드(최적/선택) + 선택 장비 선택 모드일 때 장비 선택
+            # =====================================================
+            st.markdown('<div class="ctl-label">장비 선택 장비 선택 모드</div>', unsafe_allow_html=True)
 
-        mode = st.selectbox("장비 선택 장비 선택 모드", mode_opts, label_visibility="collapsed", key=mk)
-        st.session_state.mode = mode
+            mode_opts = ["최적(자동)", "선택(수동)"]
+            if st.session_state.get(mk, "") not in mode_opts:
+                st.session_state[mk] = mode_opts[0]
 
-        equip_override = None
-        if mode == "선택(수동)":
-            st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
+            mode = st.selectbox("장비 선택 장비 선택 모드", mode_opts, label_visibility="collapsed", key=mk)
+            st.session_state.mode = mode
 
-            # sim에 함수가 없을 수 있으니 안전하게 처리
-            if cookie == "윈드파라거스 쿠키":
-                equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
-            elif cookie == "멜랑크림 쿠키":
-                equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
-            else:
-                equip_options = ["전설의 유령해적 세트"]
-
-            if st.session_state.get(ek, "") not in equip_options:
-                st.session_state[ek] = equip_options[0]
-
-            equip = st.selectbox("장비 선택", equip_options, label_visibility="collapsed", key=ek)
-            st.session_state.equip = equip
-            equip_override = equip
-        else:
-            st.session_state.equip = ""
             equip_override = None
+            if mode == "선택(수동)":
+                st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
 
-        # =====================================================
-        # 기존: 시즈나이트/파티
-        # =====================================================
-        st.markdown('<div class="ctl-label">시즈나이트</div>', unsafe_allow_html=True)
+                # sim에 함수가 없을 수 있으니 안전하게 처리
+                if cookie == "윈드파라거스 쿠키":
+                    equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
+                elif cookie == "멜랑크림 쿠키":
+                    equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
+                else:
+                    equip_options = ["전설의 유령해적 세트"]
 
-        if cookie == "윈드파라거스 쿠키":
-            seaz_options = sim.wind_allowed_seaz() or [""]
-            if st.session_state.get(sk, "") not in seaz_options:
-                st.session_state[sk] = seaz_options[0]
+                if st.session_state.get(ek, "") not in equip_options:
+                    st.session_state[ek] = equip_options[0]
 
-            seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
-            st.session_state.seaz = seaz
-
-            st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
-            party_all = ["없음", "이슬맛 쿠키"]
-            init_once(p1k, "이슬맛 쿠키")
-
-            p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
-            st.session_state.party = [x for x in [norm_none(p1)] if x]
-
-        elif cookie == "멜랑크림 쿠키":
-            seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")] or [""]
-
-            PREFERRED_SEAZ = "바닐라몬드:추격자의 결의"
-
-            cur = st.session_state.get(sk, "")
-            if (not cur) or (cur not in seaz_options):
-                st.session_state[sk] = PREFERRED_SEAZ if PREFERRED_SEAZ in seaz_options else seaz_options[0]
-
-            seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
-            st.session_state.seaz = seaz
-
-            st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
-
-            party_all = ["없음", "이슬맛 쿠키", "윈드파라거스 쿠키"]
-
-            init_once(p1k, "이슬맛 쿠키")
-            init_once(p2k, "윈드파라거스 쿠키")
-
-            p1 = st.selectbox("파티 슬롯 1", party_all, label_visibility="collapsed", key=p1k)
-
-            if p1 == "이슬맛 쿠키":
-                party2_opts = ["없음", "윈드파라거스 쿠키"]
-            elif p1 == "윈드파라거스 쿠키":
-                party2_opts = ["없음", "이슬맛 쿠키"]
+                equip = st.selectbox("장비 선택", equip_options, label_visibility="collapsed", key=ek)
+                st.session_state.equip = equip
+                equip_override = equip
             else:
-                party2_opts = party_all
+                st.session_state.equip = ""
+                equip_override = None
 
-            if st.session_state.get(p2k, "없음") not in party2_opts:
-                st.session_state[p2k] = "없음"
+            # =====================================================
+            # 기존: 시즈나이트/파티
+            # =====================================================
+            st.markdown('<div class="ctl-label">시즈나이트</div>', unsafe_allow_html=True)
 
-            p2 = st.selectbox("파티 슬롯 2", party2_opts, label_visibility="collapsed", key=p2k)
+            if cookie == "윈드파라거스 쿠키":
+                seaz_options = sim.wind_allowed_seaz() or [""]
+                if st.session_state.get(sk, "") not in seaz_options:
+                    st.session_state[sk] = seaz_options[0]
 
-            if p1 != "없음" and p2 == p1:
-                st.session_state[p2k] = "없음"
-                p2 = "없음"
+                seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
+                st.session_state.seaz = seaz
 
-            party_list = [norm_none(p1), norm_none(p2)]
-            party_list = [x for x in party_list if x]
-            st.session_state.party = party_list
+                st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
+                party_all = ["없음", "이슬맛 쿠키"]
+                init_once(p1k, "이슬맛 쿠키")
 
-        else:
-            fixed_seaz = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
-            st.session_state[sk] = fixed_seaz
-            st.selectbox("시즈나이트 선택", [fixed_seaz], label_visibility="collapsed", disabled=True, key=sk)
-            st.session_state.seaz = fixed_seaz
+                p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
+                st.session_state.party = [x for x in [norm_none(p1)] if x]
 
-            st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
-            party_all = ["없음", "윈드파라거스 쿠키"]
-            init_once(p1k, "윈드파라거스 쿠키")
+            elif cookie == "멜랑크림 쿠키":
+                seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")] or [""]
 
-            p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
-            st.session_state.party = [x for x in [norm_none(p1)] if x]
+                PREFERRED_SEAZ = "바닐라몬드:추격자의 결의"
 
-        st.markdown('<hr class="u-divider">', unsafe_allow_html=True)
+                cur = st.session_state.get(sk, "")
+                if (not cur) or (cur not in seaz_options):
+                    st.session_state[sk] = PREFERRED_SEAZ if PREFERRED_SEAZ in seaz_options else seaz_options[0]
 
-        run = st.button("실행", type="primary", use_container_width=True)
+                seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
+                st.session_state.seaz = seaz
 
-        progress_slot = st.empty()
+                with st.container(key="party_group", border=False):
+                    st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
 
-        def _progress_html(pct: int) -> str:
-            pct = max(0, min(100, int(pct)))
-            return f"""
-            <div class="prog-area">
-            <div class="prog-wrap">
-                <div class="prog-bar" style="width:{pct}%;"></div>
-                <div class="prog-text">{pct}%</div>
-            </div>
-            </div>
-            """.strip()
+                    party_all = ["없음", "이슬맛 쿠키", "윈드파라거스 쿠키"]
 
-        def run_with_progress(kind_cookie: str):
-            progress_slot.markdown(_progress_html(0), unsafe_allow_html=True)
+                    init_once(p1k, "이슬맛 쿠키")
+                    init_once(p2k, "윈드파라거스 쿠키")
 
-            def cb(p: float):
-                p = max(0.0, min(1.0, float(p)))
-                progress_slot.markdown(_progress_html(int(p * 100)), unsafe_allow_html=True)
+                    p1 = st.selectbox("파티 슬롯 1", party_all, label_visibility="collapsed", key=p1k)
 
-            #  장비 선택 모드에 따른 장비 override
-            equip_override_local = None
-            if st.session_state.mode == "선택(수동)":
-                equip_override_local = st.session_state.equip or None
-
-            if kind_cookie == "wind":
-                best = sim.optimize_wind_cycle(
-                    seaz_name=st.session_state.seaz,
-                    party=st.session_state.party,
-                    step=STEP_FIXED,
-                    progress_cb=cb,
-                    equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
-                )
-                best_kind = "wind"
-
-            elif kind_cookie == "melan":
-                best = sim.optimize_melan_cycle(
-                    seaz_name=st.session_state.seaz,
-                    party=st.session_state.party,
-                    step=STEP_FIXED,
-                    progress_cb=cb,
-                    equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
-                )
-                best_kind = "melan"
-
-            else:
-                best = sim.optimize_isle_shards_only(st.session_state.party)
-                best_kind = "isle"
-                if isinstance(best, dict):
-                    best.setdefault("potentials", {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4})
-                    best.setdefault("unique_fixed", "정화된 에메랄딘의 기억")
-                    best.setdefault("artifact_fixed", "비에 젖은 과거")
-
-            progress_slot.markdown(_progress_html(100), unsafe_allow_html=True)
-            return best, best_kind
-
-        if run:
-            kk = kind_of(st.session_state.cookie)
-            best, best_kind = run_with_progress(kk)
-
-            st.session_state.best = best
-            st.session_state.best_kind = best_kind
-            st.session_state.last_run = time.strftime("%Y-%m-%d %H:%M:%S")
-            st.rerun()
-
-# =====================================================
-# 우측: 결과
-# =====================================================
-with right_col:
-    with st.container(border=True):
-        st.markdown('<div class="h-title">결과</div>', unsafe_allow_html=True)
-
-        best = st.session_state.best
-        kind = st.session_state.best_kind
-
-        if not best:
-            st.caption("설정 후 실행하면 결과가 표시됩니다.")
-        else:
-            if kind in ("wind", "melan"):
-                c1, c2, c3 = st.columns(3, gap="small")
-                c1.metric("DPS", f"{best.get('dps', 0):,.4f}")
-                c2.metric("1사이클 시간(s)", f"{best.get('cycle_total_time', 0):,.4f}")
-                c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
-            else:
-                c1, c2 = st.columns(2, gap="small")
-                c1.metric("최종 공격력", f"{best.get('final_atk', 0):,.0f}")
-                c2.metric("최대 보호막", f"{best.get('max_shield', 0):,.0f}")
-
-            if kind in ("wind", "melan"):
-                tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
-            else:
-                tab1 = st.tabs(["결과"])[0]
-
-            with tab1:
-                def make_setting_df(best: dict, kind: str) -> pd.DataFrame:
-                    party_txt = ", ".join(best.get("party", [])) if best.get("party") else "없음"
-
-                    def add(rows, k, v):
-                        v = "" if v is None else str(v).strip()
-                        if v:
-                            rows.append({"항목": k, "값": v})
-
-                    rows = []
-                    if kind in ("wind", "melan"):
-                        add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
-                        # 선택(수동)일 때 사용자가 고른 장비도 같이 표시(참고)
-                        if st.session_state.mode == "선택(수동)":
-                            add(rows, "선택 장비", st.session_state.equip or "")
-                        add(rows, "쿠키", best.get("cookie", ""))
-                        add(rows, "장비(결과)", best.get("equip", ""))
-                        add(rows, "시즈나이트", best.get("seaz", ""))
-                        add(rows, "유니크 조각", best.get("unique", ""))
-                        add(rows, "아티팩트", best.get("artifact", ""))
-                        add(rows, "파티", party_txt)
+                    if p1 == "이슬맛 쿠키":
+                        party2_opts = ["없음", "윈드파라거스 쿠키"]
+                    elif p1 == "윈드파라거스 쿠키":
+                        party2_opts = ["없음", "이슬맛 쿠키"]
                     else:
-                        add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
-                        add(rows, "쿠키", "이슬맛 쿠키")
-                        add(rows, "장비", best.get("equip_fixed", ""))
-                        add(rows, "시즈나이트", best.get("seaz_fixed", getattr(sim, "FIXED_SEAZ_ISLE", "")))
-                        add(rows, "유니크 조각", best.get("unique_fixed", "정화된 에메랄딘의 기억"))
-                        add(rows, "아티팩트", best.get("artifact_fixed", "비에 젖은 과거"))
-                        add(rows, "파티", party_txt)
+                        party2_opts = party_all
 
-                    return pd.DataFrame(rows, columns=["항목", "값"])
+                    if st.session_state.get(p2k, "없음") not in party2_opts:
+                        st.session_state[p2k] = "없음"
 
-                setting_df = make_setting_df(best, kind)
+                    p2 = st.selectbox("파티 슬롯 2", party2_opts, label_visibility="collapsed", key=p2k)
+
+                    if p1 != "없음" and p2 == p1:
+                        st.session_state[p2k] = "없음"
+                        p2 = "없음"
+
+                    party_list = [norm_none(p1), norm_none(p2)]
+                    party_list = [x for x in party_list if x]
+                    st.session_state.party = party_list
+
+            else:
+                fixed_seaz = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
+                st.session_state[sk] = fixed_seaz
+                st.selectbox("시즈나이트 선택", [fixed_seaz], label_visibility="collapsed", disabled=True, key=sk)
+                st.session_state.seaz = fixed_seaz
+
+                st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
+                party_all = ["없음", "윈드파라거스 쿠키"]
+                init_once(p1k, "윈드파라거스 쿠키")
+
+                p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
+                st.session_state.party = [x for x in [norm_none(p1)] if x]
+
+            st.markdown('<hr class="u-divider">', unsafe_allow_html=True)
+
+            run = st.button("실행", type="primary", use_container_width=True)
+
+            progress_slot = st.empty()
+
+            def _progress_html(pct: int) -> str:
+                pct = max(0, min(100, int(pct)))
+                return f"""
+                <div class="prog-area">
+                <div class="prog-wrap">
+                    <div class="prog-bar" style="width:{pct}%;"></div>
+                    <div class="prog-text">{pct}%</div>
+                </div>
+                </div>
+                """.strip()
+
+            def run_with_progress(kind_cookie: str):
+                progress_slot.markdown(_progress_html(0), unsafe_allow_html=True)
+
+                def cb(p: float):
+                    p = max(0.0, min(1.0, float(p)))
+                    progress_slot.markdown(_progress_html(int(p * 100)), unsafe_allow_html=True)
+
+                #  장비 선택 모드에 따른 장비 override
+                equip_override_local = None
+                if st.session_state.mode == "선택(수동)":
+                    equip_override_local = st.session_state.equip or None
+
+                if kind_cookie == "wind":
+                    best = sim.optimize_wind_cycle(
+                        seaz_name=st.session_state.seaz,
+                        party=st.session_state.party,
+                        step=STEP_FIXED,
+                        progress_cb=cb,
+                        equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
+                    )
+                    best_kind = "wind"
+
+                elif kind_cookie == "melan":
+                    best = sim.optimize_melan_cycle(
+                        seaz_name=st.session_state.seaz,
+                        party=st.session_state.party,
+                        step=STEP_FIXED,
+                        progress_cb=cb,
+                        equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
+                    )
+                    best_kind = "melan"
+
+                else:
+                    best = sim.optimize_isle_shards_only(st.session_state.party)
+                    best_kind = "isle"
+                    if isinstance(best, dict):
+                        best.setdefault("potentials", {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4})
+                        best.setdefault("unique_fixed", "정화된 에메랄딘의 기억")
+                        best.setdefault("artifact_fixed", "비에 젖은 과거")
+
+                progress_slot.markdown(_progress_html(100), unsafe_allow_html=True)
+                return best, best_kind
+
+            if run:
+                kk = kind_of(st.session_state.cookie)
+                best, best_kind = run_with_progress(kk)
+
+                st.session_state.best = best
+                st.session_state.best_kind = best_kind
+                st.session_state.last_run = time.strftime("%Y-%m-%d %H:%M:%S")
+                st.rerun()
+
+    # =====================================================
+    # 우측: 결과
+    # =====================================================
+    with right_col:
+        with st.container(key="panel_result", border=True):
+            st.markdown('<div class="h-title">결과</div>', unsafe_allow_html=True)
+
+            best = st.session_state.best
+            kind = st.session_state.best_kind
+
+            if not best:
+                st.caption("설정 후 실행하면 결과가 표시됩니다.")
+            else:
+                if kind in ("wind", "melan"):
+                    c1, c2, c3 = st.columns(3, gap="small")
+                    c1.metric("DPS", f"{best.get('dps', 0):,.4f}")
+                    c2.metric("1사이클 시간(s)", f"{best.get('cycle_total_time', 0):,.4f}")
+                    c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
+                else:
+                    c1, c2 = st.columns(2, gap="small")
+                    c1.metric("최종 공격력", f"{best.get('final_atk', 0):,.0f}")
+                    c2.metric("최대 보호막", f"{best.get('max_shield', 0):,.0f}")
 
                 if kind in ("wind", "melan"):
-                    p_df = pretty_potentials(best.get("potentials", {}))
-                    s_df = pretty_shards(best.get("shards", {}))
+                    tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
                 else:
-                    pot = best.get("potentials") or {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
-                    p_df = pretty_potentials(pot)
-                    s_df = pretty_shards(best.get("shards", {}))
+                    tab1 = st.tabs(["결과"])[0]
 
-                html = f"""
-                <div class="summary-grid">
-                  <div>{labeled_table_html("세팅", setting_df, small=False, col_ratio=(0.33, 0.67))}</div>
-                  <div>{labeled_table_html("잠재력", p_df, small=True,  col_ratio=(0.55, 0.45))}</div>
-                  <div class="md-span-2">{labeled_table_html("설탕유리조각", s_df, small=True, col_ratio=(0.55, 0.45))}</div>
-                </div>
-                """
-                st.markdown(html, unsafe_allow_html=True)
+                with tab1:
+                    def make_setting_df(best: dict, kind: str) -> pd.DataFrame:
+                        party_txt = ", ".join(best.get("party", [])) if best.get("party") else "없음"
 
-            if kind in ("wind", "melan"):
-                with tab2:
-                    stats = best.get("stats", {})
-                    if not stats:
-                        st.caption("스탯 정보가 없습니다.")
+                        def add(rows, k, v):
+                            v = "" if v is None else str(v).strip()
+                            if v:
+                                rows.append({"항목": k, "값": v})
+
+                        rows = []
+                        if kind in ("wind", "melan"):
+                            add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
+                            # 선택(수동)일 때 사용자가 고른 장비도 같이 표시(참고)
+                            if st.session_state.mode == "선택(수동)":
+                                add(rows, "선택 장비", st.session_state.equip or "")
+                            add(rows, "쿠키", best.get("cookie", ""))
+                            add(rows, "장비(결과)", best.get("equip", ""))
+                            add(rows, "시즈나이트", best.get("seaz", ""))
+                            add(rows, "유니크 조각", best.get("unique", ""))
+                            add(rows, "아티팩트", best.get("artifact", ""))
+                            add(rows, "파티", party_txt)
+                        else:
+                            add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
+                            add(rows, "쿠키", "이슬맛 쿠키")
+                            add(rows, "장비", best.get("equip_fixed", ""))
+                            add(rows, "시즈나이트", best.get("seaz_fixed", getattr(sim, "FIXED_SEAZ_ISLE", "")))
+                            add(rows, "유니크 조각", best.get("unique_fixed", "정화된 에메랄딘의 기억"))
+                            add(rows, "아티팩트", best.get("artifact_fixed", "비에 젖은 과거"))
+                            add(rows, "파티", party_txt)
+
+                        return pd.DataFrame(rows, columns=["항목", "값"])
+
+                    setting_df = make_setting_df(best, kind)
+
+                    if kind in ("wind", "melan"):
+                        p_df = pretty_potentials(best.get("potentials", {}))
+                        s_df = pretty_shards(best.get("shards", {}))
                     else:
-                        atk_df, crit_df, common_df, skill_df, strike_df = build_stat_tables(stats)
-                        render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df)
+                        pot = best.get("potentials") or {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
+                        p_df = pretty_potentials(pot)
+                        s_df = pretty_shards(best.get("shards", {}))
 
-            if kind in ("wind", "melan"):
-                with tab3:
-                    cb = best.get("cycle_breakdown", {})
-                    df = cycle_breakdown_df(cb)
+                    html = f"""
+                    <div class="summary-grid">
+                    <div>{labeled_table_html("세팅", setting_df, small=False, col_ratio=(0.33, 0.67))}</div>
+                    <div>{labeled_table_html("잠재력", p_df, small=True,  col_ratio=(0.55, 0.45))}</div>
+                    <div class="md-span-2">{labeled_table_html("설탕유리조각", s_df, small=True, col_ratio=(0.55, 0.45))}</div>
+                    </div>
+                    """
+                    st.markdown(html, unsafe_allow_html=True)
 
-                    render_labeled_table(
-                        "사이클 내 딜 기여도",
-                        df,
-                        small=False,
-                        col_widths=(0.48, 0.32, 0.20),
-                    )
+                if kind in ("wind", "melan"):
+                    with tab2:
+                        stats = best.get("stats", {})
+                        if not stats:
+                            st.caption("스탯 정보가 없습니다.")
+                        else:
+                            atk_df, crit_df, common_df, skill_df, strike_df = build_stat_tables(stats)
+                            render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df)
 
-        if st.session_state.last_run:
-            st.caption(f"마지막 실행: {st.session_state.last_run}")
+                if kind in ("wind", "melan"):
+                    with tab3:
+                        cb = best.get("cycle_breakdown", {})
+                        df = cycle_breakdown_df(cb)
+
+                        render_labeled_table(
+                            "사이클 내 딜 기여도",
+                            df,
+                            small=False,
+                            col_widths=(0.48, 0.32, 0.20),
+                        )
+
+            if st.session_state.last_run:
+                st.caption(f"실행: {st.session_state.last_run}")
+st.markdown('</div>', unsafe_allow_html=True)
