@@ -819,15 +819,15 @@ with st.container(key="outer_shell", border=False):
             ek = equip_key(k)
 
             # =====================================================
-            #  추가: 장비 선택 모드(최적/선택) + 선택 장비 선택 모드일 때 장비 선택
+            #  추가: 장비 선택 모드(최적/선택)
             # =====================================================
-            st.markdown('<div class="ctl-label">장비 선택 장비 선택 모드</div>', unsafe_allow_html=True)
+            st.markdown('<div class="ctl-label">장비 선택 모드</div>', unsafe_allow_html=True)
 
             mode_opts = ["최적(자동)", "선택(수동)"]
             if st.session_state.get(mk, "") not in mode_opts:
                 st.session_state[mk] = mode_opts[0]
 
-            mode = st.selectbox("장비 선택 장비 선택 모드", mode_opts, label_visibility="collapsed", key=mk)
+            mode = st.selectbox("장비 선택 모드", mode_opts, label_visibility="collapsed", key=mk)
             st.session_state.mode = mode
 
             equip_override = None
