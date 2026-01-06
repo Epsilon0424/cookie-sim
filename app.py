@@ -167,6 +167,14 @@ div[data-testid="stTabs"] button[data-baseweb="tab"] *{
   font-size: 12px !important;
   line-height: 1.4 !important;
 }
+.title-card{
+  background: var(--SHELL_BG) !important;
+  border-radius: var(--CARD_RADIUS) !important;
+  box-shadow: var(--CARD_SHADOW) !important;
+  padding: 16px 18px 12px 18px !important;
+  margin: 0 0 14px 0 !important;
+}
+.title-card .h-meta{ margin-bottom: 0 !important; }
 
 /* =====================================================
    6) Select UI
@@ -754,9 +762,13 @@ def party2_key(kind: str) -> str:
 # =====================================================
 # 상단 타이틀
 # =====================================================
-st.markdown('<div class="h-title">쿠키 최적화 시뮬레이터</div>', unsafe_allow_html=True)
-st.markdown('<div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>', unsafe_allow_html=True)
-st.markdown('<div class="h-meta">기타 문의는 Epsilon24@gmail.com으로 주세요</div>', unsafe_allow_html=True)
+st.markdown("""
+<div class="title-card">
+  <div class="h-title">쿠키 최적화 시뮬레이터</div>
+  <div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>
+  <div class="h-meta">기타 문의는 Epsilon24@gmail.com으로 주세요</div>
+</div>
+""", unsafe_allow_html=True)
 
 # =====================================================
 # 레이아웃: 좌/우
