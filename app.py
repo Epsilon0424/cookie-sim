@@ -4,6 +4,7 @@ import streamlit as st
 import pandas as pd
 import cookie_simulator as sim
 import re
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="쿠키 최적화 시뮬레이터", layout="wide")
 STEP_FIXED = 7
@@ -148,7 +149,7 @@ div[data-testid="stVerticalBlockBorderWrapper"]{
 .h-meta{
   font-size: 12px;
   color: #6b7280;
-  margin: 0 0 14px 0;
+  margin: 0 0 6px 0;
 }
 div[data-testid="stMetricValue"]{
   font-size: 20px;
@@ -167,14 +168,29 @@ div[data-testid="stTabs"] button[data-baseweb="tab"] *{
   font-size: 12px !important;
   line-height: 1.4 !important;
 }
+
 .title-card{
   background: var(--SHELL_BG) !important;
   border-radius: var(--CARD_RADIUS) !important;
   box-shadow: var(--CARD_SHADOW) !important;
-  padding: 16px 18px 12px 18px !important;
+
+  padding: 14px 18px !important;
   margin: 0 0 14px 0 !important;
+
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
-.title-card .h-meta{ margin-bottom: 0 !important; }
+
+/* 카드 안 텍스트 기본 margin 제거(여백 흔들림 방지) */
+.title-card .h-title,
+.title-card .h-sub,
+.title-card .h-meta{
+  margin: 0 !important;
+}
+
+.title-card{ gap: 2px; }
+.title-card .h-sub{ margin-bottom: 0px !important; }
 
 /* =====================================================
    6) Select UI
