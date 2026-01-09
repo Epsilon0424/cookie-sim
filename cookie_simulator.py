@@ -456,6 +456,7 @@ def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
     if ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키"):
         u_cd = get_uptime("PARTY_ISLE_CRITDMG_0p56")
         stats["crit_dmg"] += 0.56 * u_cd
+        stats["atc_pct"] += 0.224
 
         u_seaz = get_uptime("PARTY_ISLE_SEAZ_ATK25_ALL30")
         stats["final_atk_mult"] += 0.25 * u_seaz
@@ -464,7 +465,6 @@ def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
     # [2] 윈파 파티 (또는 메인)
     if ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키"):
         u = get_uptime("PARTY_WIND_ARMOR224_FINAL3125_CRIT40")
-        stats["final_dmg"] += 0.3125 * u
         stats["crit_dmg"]  += 0.40   * u
 
         if GOLDEN_SET_TEAM_AURA:
