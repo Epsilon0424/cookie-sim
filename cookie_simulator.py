@@ -456,7 +456,7 @@ def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
     if ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키"):
         u_cd = get_uptime("PARTY_ISLE_CRITDMG_0p56")
         stats["crit_dmg"] += 0.56 * u_cd
-        stats["atc_pct"] = stats.get("atc_pct", 0.0) + 0.224
+        stats["atk_pct"] += 0.224
         
         u_seaz = get_uptime("PARTY_ISLE_SEAZ_ATK25_ALL30")
         stats["final_atk_mult"] += 0.25 * u_seaz
