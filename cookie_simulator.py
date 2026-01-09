@@ -464,7 +464,6 @@ def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
     # [2] 윈파 파티 (또는 메인)
     if ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키"):
         u = get_uptime("PARTY_WIND_ARMOR224_FINAL3125_CRIT40")
-        stats["armor_pen"] += 0.224  * u
         stats["final_dmg"] += 0.3125 * u
         stats["crit_dmg"]  += 0.40   * u
 
