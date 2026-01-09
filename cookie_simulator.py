@@ -945,7 +945,7 @@ PRIMA_ENTRY_COEFF = 11.36
 BREATH_GAIN_PER_BASIC_HIT = 0.05
 
 MELAN_CYCLE_TOKENS = [
-    "S", "B4", "U", "B4", "U",
+    "S", "U", "B4", "B4", "U",
     "S", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
