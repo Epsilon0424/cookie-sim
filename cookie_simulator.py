@@ -20,6 +20,8 @@ UPTIME_CONFIG = {
     # 이슬: 파티 치피 +56% (항상이라고 가정)
     "PARTY_ISLE_CRITDMG_0p56": {"mode": MODE_ALWAYS},
 
+    "PARTY_ISLE_ATK_0p224": {"mode": MODE_ALWAYS},
+
     # 이슬: (가정) 시즈로 최종공 +25%, 모속피 +30% (상시)
     "PARTY_ISLE_SEAZ_ATK25_ALL30": {
         "mode": MODE_ALWAYS,     # 필요하면 MODE_AVERAGE로 변경
@@ -62,6 +64,27 @@ ARGON_BONUS_PER_PROC = 0.50    # 추가피해 50% (unit 기준 단순화)
 ARGON_DMG_REDUCTION = 0.30     # 받피감 30% (딜 모델에는 미반영)
 
 # =====================================================
+# 0.3) 전투/공식 파라미터
+# =====================================================
+DEFENSE_K = 2.5
+RECOMMENDED_ELEM_MULT = 1.30
+
+# ---- 속성강타(표식) 모델(설명문 기반)
+# (A) 축적 비율: 동일속성 66.666%, 타속성 33.333%
+MARK_ACCUM_SAME = 2.0 / 3.0
+MARK_ACCUM_DIFF = 1.0 / 3.0
+
+# (B) "표식 데미지는 축적 총량의 특정 비율"을
+# 기존 코드의 결과(동일 1/8, 타속성 1/16)를 유지하도록 역산한 방출 계수
+#  - 동일: (2/3) * X = 1/8  => X = 3/16
+#  - 타속: (1/3) * X = 1/16 => X = 3/16
+MARK_RELEASE_MULT = 3.0 / 16.0
+
+# (C) 표식 자체의 '속성저항'(기존 상수 유지하되, 디버프로 깎일 수 있게 처리)
+BOSS_MARK_ELEMENT_RESIST_DEFAULT = 0.40
+
+
+# =====================================================
 # 1) 공통 유틸
 # =====================================================
 
@@ -98,12 +121,7 @@ def get_uptime(key: str) -> float:
     return 1.0
 
 def add_stat(stats: Dict[str, float], k: str, v: float):
-    v = float(v)
-    if k == "basic_dmg" and BASIC_DMG_STACKING_MODE == "ADD":
-        # 기본피는 (1+a)(1+b)-1 로 누적
-        stats[k] = (1.0 + stats.get(k, 0.0)) * (1.0 + v) - 1.0
-    else:
-        stats[k] = stats.get(k, 0.0) + v
+    stats[k] = stats.get(k, 0.0) + float(v)
 
 def add(stats: Dict[str, float], bonus: Dict[str, float]):
     """dict 형태 bonus를 stats에 누적."""
@@ -218,6 +236,7 @@ POTENTIAL_INC = {
     "crit_dmg": 0.25,
     "armor_pen": 0.08,
     "elem_atk": 80,
+    "atk_flat": 0.0,
     "buff_amp": 0.0,
     "debuff_amp": 0.0,
 }
@@ -265,7 +284,7 @@ EQUIP_SETS = {
         "head": {"base": {}, "unique": {}},
         "top":  {"base": {}, "unique": {}},
         "bottom":{"base": {}, "unique": {}},
-        "set_effect": {"base": {"all_elem_dmg": 0.30, "def_reduction": 0.10}}
+        "set_effect": {"base": {"all_elem_dmg": 0.30, "def_reduction_raw": 0.10}}
     },
     "황금 예복 세트": {
         "head": {"base": {"all_elem_dmg": 0.312}, "unique": {"crit_rate": 0.225}},
@@ -310,22 +329,32 @@ SEAZNITES = {
 # =====================================================
 
 ARTIFACTS = {
-    "NONE": {"stats": {}},
+    "NONE": {
+        "base_stats": {},        # 기본옵션(장비스탯)
+        "unique_stats": {},      # 고유능력인데 '스탯'으로 처리(증폭 X)
+        "unique_buffs": {},      # 고유능력 버프(증폭 O)
+    },
 
     "끝나지 않는 죽음의 밤": {
-        "stats": {
-            "atk_pct": 0.40,
+        # 기본옵션: 공격력 +40%  => 장비스탯 atk_pct
+        "base_stats": {"atk_pct": 0.40},
+
+        # 고유능력: 치확/치피 => 버프(증폭 O)
+        "unique_buffs": {
             "crit_rate": 0.30,
             "crit_dmg": 0.80,
         }
     },
 
     "이어지는 마음": {
-        "stats": {
-            "atk_pct": 0.40,
-            "debuff_amp": 0.25,
-            "crit_dmg": 0.50,
-        },
+        "base_stats": {"atk_pct": 0.40},
+
+        # debuff_amp는 버프가 아니라 "증폭 스탯"이라 unique_stats로
+        "unique_stats": {"debuff_amp": 0.25},
+
+        # 치피 50%는 고유능력
+        "unique_buffs": {"crit_dmg": 0.50},
+
         "emeraldin": {
             "crit_dmg_bonus": 0.40,
             "duration": 18.0,
@@ -335,7 +364,37 @@ ARTIFACTS = {
 
 def apply_artifact(stats: Dict[str, float], artifact_name: str):
     a = ARTIFACTS.get(artifact_name, ARTIFACTS["NONE"])
-    add(stats, a.get("stats", {}))
+
+    # 1) 기본옵션(장비스탯) / 고유스탯(증폭 X)
+    add(stats, a.get("base_stats", {}))
+    add(stats, a.get("unique_stats", {}))
+
+    # 2) 고유 버프(증폭 O)
+    BA = float(stats.get("buff_amp", 0.0))
+    buff_scale = 1.0 + BA
+
+    ub = a.get("unique_buffs", {}) or {}
+
+    # apply_artifact() 안
+    if "atk_pct" in ub:
+        x = float(ub["atk_pct"])
+        stats["buff_atk_pct_raw"] += x * buff_scale
+
+    # 치확/치피/속피 버프: 가산
+    if "crit_rate" in ub:
+        stats["buff_crit_rate_raw"] += float(ub["crit_rate"]) * buff_scale
+    if "crit_dmg" in ub:
+        stats["buff_crit_dmg_raw"] += float(ub["crit_dmg"]) * buff_scale
+    if "all_elem_dmg" in ub:
+        stats["buff_all_elem_dmg_raw"] += float(ub["all_elem_dmg"]) * buff_scale
+
+    # (필요시) 최종공/피해증가 같은 버프도 여기서 확장 가능
+    if "final_atk_mult" in ub:
+        stats["final_atk_mult"] += float(ub["final_atk_mult"]) * buff_scale
+    if "dmg_bonus" in ub:
+        stats["dmg_bonus"] += float(ub["dmg_bonus"]) * buff_scale
+    if "final_dmg" in ub:
+        stats["final_dmg"] += float(ub["final_dmg"]) * buff_scale
 
 # =====================================================
 # 7) 공통: 유니크 설탕유리조각
@@ -450,24 +509,42 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
 # =====================================================
 # 8) 공통: 파티 버프/디버프
 # =====================================================
-
 def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
+    # 버프 증폭은 "버프"에만 적용 (공퍼/치피/속피 버프)
+    # (아티/장비/설유 같은 "스탯"에는 미적용)
+    BA = float(stats.get("buff_amp", 0.0))
+    buff_scale = 1.0 + BA
+
     # [1] 이슬 파티 (또는 메인)
     if ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키"):
         u_cd = get_uptime("PARTY_ISLE_CRITDMG_0p56")
-        stats["crit_dmg"] += 0.56 * u_cd
-        stats["atk_pct"] += 0.224
-        
+        # 치피 +56%는 버프라고 보고 raw로 적립
+        stats["buff_crit_dmg_raw"] += 0.56 * u_cd * buff_scale
+        stats["buff_amp"]         += 0.40 # 잠재력
+        stats["buff_amp"]         += 0.24 # 전용무기
+
+        # 이슬 공퍼 22.4% (버프) → 합으로 적립
+        u_atk = get_uptime("PARTY_ISLE_ATK_0p224")
+        stats["buff_atk_pct_raw"] += 0.224 * u_atk * buff_scale
+
         u_seaz = get_uptime("PARTY_ISLE_SEAZ_ATK25_ALL30")
-        stats["final_atk_mult"] += 0.25 * u_seaz
-        stats["all_elem_dmg"]   += 0.30 * u_seaz
+        # "버프증폭이 속피/치피에도 영향"이라고 했으니 최종공도 동일 처리
+        stats["final_atk_mult"] += 0.25 * u_seaz * buff_scale
+        stats["buff_amp"]         += 0.20 # 시즈나이트
+
+        # 모속피 +30%는 버프(= buff_all_elem_dmg_raw)로
+        stats["buff_all_elem_dmg_raw"] += 0.30 * u_seaz * buff_scale
 
     # [2] 윈파 파티 (또는 메인)
     if ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키"):
         u = get_uptime("PARTY_WIND_ARMOR224_FINAL3125_CRIT40")
-        stats["crit_dmg"]  += 0.40   * u
+        # 치피 +40%도 버프라고 보면 raw로
+        stats["buff_crit_dmg_raw"] += 0.40 * u * buff_scale
+        stats["debuff_amp"]         += 0.40 # 잠재력
+        stats["debuff_amp"]         += 0.25 # 아티팩트
 
         if GOLDEN_SET_TEAM_AURA:
+            # 황금 예복: 디버프증폭/속강은 스탯(오라/효과)로 처리(증폭 미적용)
             stats["debuff_amp"]         += 0.15
             stats["element_strike_dmg"] += 0.25
 
@@ -476,29 +553,97 @@ def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
 # =====================================================
 
 def base_damage_only(stats: Dict[str, float]) -> float:
-    cr = clamp(stats["crit_rate"], 0.0, 1.0)
-    cd = max(1.0, stats["crit_dmg"])
-    armor_pen = clamp(stats["armor_pen"], 0.0, 0.8)
+    # 치확 = (장비스탯 치확) + (버프 치확)
+    promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
+    promo_ap_mult = float(stats.get("promo_armor_pen_mult", 1.0))
 
-    OA = stats["base_atk"]
-    EA = stats["base_elem_atk"] + stats["elem_atk"]
+    cr = clamp(
+        (float(stats.get("crit_rate", 0.0)) * promo_cr_mult) + float(stats.get("buff_crit_rate_raw", 0.0)),
+        0.0, 1.0
+    )
 
-    atk_pct = 1 + stats["base_atk_pct"] + stats["atk_pct"]
-    final_atk = 1 + stats["final_atk_mult"]
+    armor_pen = clamp(float(stats.get("armor_pen", 0.0)) * promo_ap_mult, 0.0, 0.8)
 
-    crit_mult = 1 + cr * (cd - 1)
+    # 치피 = base + 버프치피
+    cd_base = float(stats.get("crit_dmg", 1.0))
+    cd = max(1.0, cd_base + float(stats.get("buff_crit_dmg_raw", 0.0)))
 
-    def_reduction = clamp(stats.get("def_reduction", 0.0), 0.0, 0.50)
-    defense_mult = 1 / (1 + 2.5 * (1 - armor_pen) * (1 - def_reduction))
+    # [A] 장비 공격력(Flat): base_atk + equip_atk_flat
+    OA = float(stats.get("base_atk", 0.0)) + float(stats.get("equip_atk_flat", 0.0))
+
+    # [B] 속성 공격력(별도 축)
+    EA = float(stats.get("base_elem_atk", 0.0)) + float(stats.get("elem_atk", 0.0))
+
+    # [C] 장비 공퍼(= 돌파 공퍼 + 장비/스탯 공퍼 합)
+    promo_atk_mult = float(stats.get("promo_atk_pct_mult", 1.0))
+
+    equip_atk_pct = (1.0 + float(stats.get("base_atk_pct", 0.0)) + float(stats.get("atk_pct", 0.0)))
+    equip_atk_pct *= promo_atk_mult
+
+    # [D] 버프 공퍼(합) -> 배율
+    buff_atk_pct_raw = float(stats.get("buff_atk_pct_raw", 0.0))
+    buff_atk_mult_sum = 1.0 + buff_atk_pct_raw
+
+    # 레거시(혹시 다른 코드에서 buff_atk_mult를 직접 곱 누적했을 수도 있으니)
+    buff_atk_mult_legacy = float(stats.get("buff_atk_mult", 1.0))
+
+    # 둘 다 있으면 곱해서 보존(대부분 legacy=1.0이라 영향 없음)
+    buff_atk_mult = buff_atk_mult_sum * buff_atk_mult_legacy
+
+    # [E] 최종공
+    final_atk = 1.0 + float(stats.get("final_atk_mult", 0.0))
+
+    # [F] 치명 배율
+    cd_mult = max(1.0, cd_base + float(stats.get("buff_crit_dmg_raw", 0.0)))
+    cd_add  = cd_mult - 1.0
+    crit_mult = 1.0 + cr * cd_add
+
+    # -----------------------------
+    # 디버프증폭 적용: 방깎/내성깎만
+    # -----------------------------
+    DA = float(stats.get("debuff_amp", 0.0))
+    debuff_scale = 1.0 + DA
+
+    def_reduction = clamp(float(stats.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
+
+    # 방어 배율: 1 / (1 + K*(1-방관)*(1-방깎))
+    defense_mult = 1.0 / (1.0 + DEFENSE_K * (1.0 - armor_pen) * (1.0 - def_reduction))
+
+    # 속성 내성 배율: (1 - 내성 + 내성감소)
+    boss_resist = float(stats.get("boss_elem_resist", 0.0))
+    res_red = float(stats.get("elem_res_reduction_raw", 0.0)) * debuff_scale
+    eff_resist = clamp(boss_resist - res_red, -0.95, 0.95)
+    elem_res_mult = 1.0 - eff_resist
+
+    # 속피(장비/스탯 + 버프속피)
+    all_elem_dmg_total = float(stats.get("all_elem_dmg", 0.0)) + float(stats.get("buff_all_elem_dmg_raw", 0.0))
+
+    # 피해량 / 최종피해
+    dmg_bonus = float(stats.get("dmg_bonus", 0.0))
+    final_dmg = float(stats.get("final_dmg", 0.0))
+
+    # 추천 속성 배율(추천 속성일 때 recommended_mult=1.3 세팅)
+    recommended_mult = float(stats.get("recommended_mult", 1.0))
+
+    promo_final_mult = float(stats.get("promo_final_dmg_mult", 1.0))
+
+    dmg_taken_inc = float(stats.get("dmg_taken_inc", 0.0))
+    taken_mult = 1.0 + dmg_taken_inc
 
     return (
         (OA + EA)
-        * atk_pct
+        * equip_atk_pct
+        * buff_atk_mult
         * final_atk
-        * (1 + stats["all_elem_dmg"])
-        * crit_mult
         * defense_mult
-        * (1 + stats["final_dmg"])
+        * elem_res_mult
+        * (1.0 + all_elem_dmg_total)
+        * crit_mult
+        * (1.0 + dmg_bonus)
+        * (1.0 + final_dmg) 
+        * promo_final_mult
+        * recommended_mult
+        * taken_mult
     )
 
 def skill_bonus_mult(stats: Dict[str, float], skill_type: str) -> float:
@@ -521,17 +666,45 @@ def strike_total_from_direct(
     stats: Dict[str, float],
     party: List[str]
 ) -> float:
-    has_wind_marker = ("윈드파라거스 쿠키" in party) or (cookie_name_kr == "윈드파라거스 쿠키")
-    if not has_wind_marker:
+    """
+    속성강타(표식) 모델(설명 반영 요약)
+    - 추천 속성과 무관
+    - 디버프 증폭은 '방깎/내성깎'에만 적용(표식 데미지 자체는 debuff_amp 영향 X)
+    - 동일속성은 데미지의 66.666%가 축적, 타속성은 33.333%가 축적
+    - 실제 발동 시 축적 총량의 특정 비율(MARK_RELEASE_MULT)이 방출된다고 가정
+      (이 값은 기존 1/8, 1/16 결과를 보존하도록 역산됨)
+    - 표식 속성저항(기본 0.40) 적용, 표식저항감소 디버프가 있으면 반영 가능
+    """
+
+    # 표식은 "스트라이커"가 있어야 생김(현재는 윈파만 표식 제공한다고 가정)
+    has_marker = ("윈드파라거스 쿠키" in party) or (cookie_name_kr == "윈드파라거스 쿠키")
+    if not has_marker:
         return 0.0
 
     attacker_elem = COOKIE_ELEMENT.get(cookie_name_kr, "unknown")
-    ratio = STRIKE_RATIO_MATCH if attacker_elem == WIND_MARK_ELEMENT else STRIKE_RATIO_MISMATCH
+    same = (attacker_elem == WIND_MARK_ELEMENT)
 
-    resist_mult = 1.0 - clamp(BOSS_MARK_ELEMENT_RESIST, 0.0, 0.95)
+    # (1) 축적량
+    accum_ratio = MARK_ACCUM_SAME if same else MARK_ACCUM_DIFF
+    stored = direct_damage * accum_ratio
+
+    # (2) 방출량(= stored의 일부가 속성강타로 변환된다고 가정)
+    strike_base = stored * MARK_RELEASE_MULT
+
+    # (3) 표식 속성저항(별도 적용)
+    # 디버프증폭이 표식저항감소에도 적용되게 raw를 사용
+    DA = float(stats.get("debuff_amp", 0.0))
+    debuff_scale = 1.0 + DA
+    mark_res_red = float(stats.get("mark_res_reduction_raw", 0.0)) * debuff_scale
+
+    mark_resist = float(stats.get("boss_mark_resist", BOSS_MARK_ELEMENT_RESIST_DEFAULT))
+    eff_mark_resist = clamp(mark_resist - mark_res_red, -0.95, 0.95)
+    mark_res_mult = 1.0 - eff_mark_resist
+
+    # (4) 속성강타 피해 증가(시즈나이트/오라 등)
     es = float(stats.get("element_strike_dmg", 0.0))
 
-    return direct_damage * ratio * resist_mult * (1.0 + es)
+    return strike_base * mark_res_mult * (1.0 + es)
 
 # =====================================================
 # 10) 공통: 스탯 빌더 / 제약
@@ -557,12 +730,39 @@ def build_stats_for_combo(
         "crit_dmg": base["crit_dmg"],
         "armor_pen": base["armor_pen"],
 
-        "atk_pct": 0.0,
-        "elem_atk": 0.0,
-        "all_elem_dmg": 0.0,
-        "def_reduction": 0.0,
-        "final_dmg": 0.0,
-        "final_atk_mult": 0.0,
+        # -----------------------------
+        # 장비/스탯(= "공격력 증가" 계열 포함)
+        # -----------------------------
+        "atk_pct": 0.0,          # 장비 공퍼(설유/장비옵/아티 '공격력 증가' 등)
+        "equip_atk_flat": 0.0,   # 장비 공격력(Flat) (잠재 '공격력', 아티 기본옵 공격력 등)
+        "elem_atk": 0.0,         # 속성 공격력(별도 축)
+        "all_elem_dmg": 0.0,     # 속피(장비/스탯 축)
+
+        # -----------------------------
+        # 버프(= 고유능력/파티/락스타/다크초코 등)
+        #  - buff_amp 적용 대상
+        #  - 공격력 버프는 "개별 곱"이므로 raw가 아니라 mult로 관리
+        # -----------------------------
+        "buff_atk_mult": 1.0,           # 버프 공격력: (1+x)*(1+y)*...
+        "buff_atk_pct_raw": 0.0,        # 버프 공격력% 합(가산)  ex) 0.224 + 0.40 ...
+        "buff_crit_rate_raw": 0.0,      # 버프 치확(가산)
+        "buff_crit_dmg_raw": 0.0,       # 버프 치피(가산)
+        "buff_all_elem_dmg_raw": 0.0,   # 버프 속피(가산)
+
+        # -----------------------------
+        # 디버프(= 방깎/내성깎) raw
+        # 디버프증폭(debuff_amp)이 적용되는 축
+        # -----------------------------
+        "def_reduction_raw": 0.0,      # 방어력 감소 raw
+        "elem_res_reduction_raw": 0.0, # 속성 내성 감소 raw
+        "mark_res_reduction_raw": 0.0, # 표식 속성저항 감소 raw
+
+        # -----------------------------
+        # 기타 배율/축
+        # -----------------------------
+        "final_atk_mult": 0.0,     # 최종공(별도 축)
+        "dmg_bonus": 0.0,          # 피해량 총합(=일반 피해증가)
+        "final_dmg": float(base.get("final_dmg", 0.0)),        # 최종 피해
 
         "basic_dmg": 0.0,
         "special_dmg": 0.0,
@@ -571,15 +771,51 @@ def build_stats_for_combo(
 
         "element_strike_dmg": 0.0,
 
-        "buff_amp": 0.0,
-        "debuff_amp": 0.0,
+        "buff_amp": 0.0,      # 버프 증폭(공퍼/치피/속피 버프에 적용)
+        "debuff_amp": 0.0,    # 디버프 증폭(방깎/내성깎에 적용)
+
+        # 보스 속성 내성(기본값: 0.0) — 필요하면 외부에서 세팅
+        "boss_elem_resist": 0.0,
+        "dmg_taken_inc": 0.0,  # 적이 받는 피해 증가(받피증) - 디버프증폭 영향 X
+
+        # 추천 속성 여부(기본 1.0, 추천이면 1.3로 세팅)
+        "recommended_mult": 1.0,
 
         "unique_extra_coeff": 0.0,
 
         "sugar_set_enabled": 0.0,
         "sugar_set_proc_chance": 0.0,
         "sugar_set_proc_coeff": 0.0,
+
+        # 승급 배율(곱연산 축)
+        "promo_crit_rate_mult": 1.0,
+        "promo_armor_pen_mult": 1.0,
+        "promo_atk_pct_mult": 1.0,
+        "promo_final_dmg_mult": 1.0,
+        "promo_prima_dmg_mult": 1.0,
     }
+
+    # =====================================================
+    # [멜랑크림] 승급 효과: 전부 곱연산 축으로 기록
+    # =====================================================
+    if cookie_name_kr == "멜랑크림 쿠키" and MELAN_PROMO_ENABLED:
+        stats["promo_crit_rate_mult"] *= MELAN_PROMO_CRIT_RATE_MULT
+        stats["promo_armor_pen_mult"] *= MELAN_PROMO_ARMOR_PEN_MULT
+        stats["promo_atk_pct_mult"]   *= MELAN_PROMO_ATK_PCT_MULT
+        stats["promo_final_dmg_mult"] *= MELAN_PROMO_FINAL_DMG_MULT
+        stats["promo_prima_dmg_mult"] *= MELAN_PROMO_PRIMA_DMG_MULT
+        stats["_melan_promo"] = 1.0
+
+    if cookie_name_kr == "윈드파라거스 쿠키" and WIND_PROMO_ENABLED:
+        stats["crit_rate"] += WIND_PROMO_CRIT_RATE_ADD
+        stats["atk_pct"]   += WIND_PROMO_ATK_PCT_ADD
+
+        # def/hp는 딜에 직접 안 쓰더라도 스탯으로 기록
+        stats["def_pct"] = float(stats.get("def_pct", 0.0)) + WIND_PROMO_DEF_PCT_ADD
+        stats["hp_pct"]  = float(stats.get("hp_pct", 0.0))  + WIND_PROMO_HP_PCT_ADD
+
+        stats["final_dmg"] += WIND_PROMO_FINAL_DMG_ADD
+        stats["_wind_promo"] = 1.0
 
     equip = EQUIP_SETS[equip_name]
     for part in ["head", "top", "bottom"]:
@@ -592,24 +828,25 @@ def build_stats_for_combo(
         stats["sugar_set_proc_chance"] = SUGAR_SET_PROC_CHANCE
         stats["sugar_set_proc_coeff"] = SUGAR_SET_PROC_ATK_COEFF
 
-    if seaz_name is not None:
-        seaz = SEAZNITES[seaz_name]
-        add(stats, seaz.get("sub", {}))
-        passive = seaz.get("passive", {})
+    if seaz_name:
+        seaz = SEAZNITES.get(seaz_name)
+        if seaz:
+            add(stats, seaz.get("sub", {}))
+            passive = seaz.get("passive", {}) or {}
 
-        if "ally_all_elem_dmg" in passive:
-            stats["all_elem_dmg"] += passive["ally_all_elem_dmg"]
-        if "element_strike_dmg" in passive:
-            stats["element_strike_dmg"] += passive["element_strike_dmg"]
-        if "final_dmg" in passive:
-            stats["final_dmg"] += passive["final_dmg"]
+            if "ally_all_elem_dmg" in passive:
+                stats["all_elem_dmg"] += passive["ally_all_elem_dmg"]
+            if "element_strike_dmg" in passive:
+                stats["element_strike_dmg"] += passive["element_strike_dmg"]
+            if "final_dmg" in passive:
+                stats["final_dmg"] += passive["final_dmg"]
 
-        for k in ["basic_dmg", "special_dmg", "ult_dmg", "passive_dmg"]:
-            if k in passive:
-                add_stat(stats, k, passive[k])
+            for k in ["basic_dmg", "special_dmg", "ult_dmg", "passive_dmg"]:
+                if k in passive:
+                    add_stat(stats, k, passive[k])
 
-        if "final_dmg_stack" in passive and "max_stacks" in passive:
-            stats["final_dmg"] += passive["final_dmg_stack"] * passive["max_stacks"]
+            if "final_dmg_stack" in passive and "max_stacks" in passive:
+                stats["final_dmg"] += passive["final_dmg_stack"] * passive["max_stacks"]
 
     for k, slots in shards.items():
         if k in SHARD_INC:
@@ -620,6 +857,7 @@ def build_stats_for_combo(
     stats["crit_dmg"]  += potentials.get("crit_dmg", 0) * POTENTIAL_INC["crit_dmg"]
     stats["armor_pen"] += potentials.get("armor_pen", 0) * POTENTIAL_INC["armor_pen"]
     stats["elem_atk"]  += potentials.get("elem_atk", 0) * POTENTIAL_INC["elem_atk"]
+    stats["equip_atk_flat"] += potentials.get("atk_flat", 0) * POTENTIAL_INC["atk_flat"]
 
     stats["buff_amp"]   += potentials.get("buff_amp", 0) * POTENTIAL_INC["buff_amp"]
     stats["debuff_amp"] += potentials.get("debuff_amp", 0) * POTENTIAL_INC["debuff_amp"]
@@ -631,9 +869,15 @@ def build_stats_for_combo(
     return stats
 
 def is_valid_by_caps(stats: Dict[str, float]) -> bool:
-    if stats["crit_rate"] > 1.0 + 1e-12:
+    promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
+    promo_ap_mult = float(stats.get("promo_armor_pen_mult", 1.0))
+
+    eff_cr = stats["crit_rate"] * promo_cr_mult
+    eff_ap = stats["armor_pen"] * promo_ap_mult
+
+    if eff_cr > 1.0 + 1e-12:
         return False
-    if stats["armor_pen"] > 0.80 + 1e-12:
+    if eff_ap > 0.80 + 1e-12:
         return False
     return True
 
@@ -641,14 +885,23 @@ def is_valid_by_caps(stats: Dict[str, float]) -> bool:
 # (A) 윈드파라거스
 # =====================================================
 
+# [윈드파라거스] 승급 효과
+WIND_PROMO_ENABLED = True
+WIND_PROMO_CRIT_RATE_ADD = 0.10
+WIND_PROMO_ATK_PCT_ADD   = 0.10
+WIND_PROMO_DEF_PCT_ADD   = 0.10
+WIND_PROMO_HP_PCT_ADD    = 0.10
+WIND_PROMO_FINAL_DMG_ADD = 0.05
+
 BASE_STATS_WIND = {
     "윈드파라거스 쿠키": {
         "atk": 635.0,
         "elem_atk": 0.0,
-        "atk_pct": 0.0,
-        "crit_rate": 0.457,
+        "atk_pct": 0.52, # 전용무기 포함
+        "crit_rate": 0.475,
         "crit_dmg": 1.5,
-        "armor_pen": 0.0
+        "armor_pen": 0.0,
+        "final_dmg": 0.30 # 전용무기 포함
     }
 }
 
@@ -659,7 +912,11 @@ WIND_ULT_COEFF = 7.242 * 5
 
 WIND_LOYALTY_1_COEFF = 5.069 * 3
 WIND_LOYALTY_2_COEFF = 3.266 * 6
-WIND_CHARGE_COEFF = WIND_LOYALTY_1_COEFF + WIND_LOYALTY_2_COEFF
+
+# 승급: 충성의 기류 공격 추가
+WIND_LOYALTY_3_COEFF = 5.10 * (1 + 4)   # 510% + 510%x4 = 25.5
+
+WIND_CHARGE_COEFF = WIND_LOYALTY_1_COEFF + WIND_LOYALTY_2_COEFF + WIND_LOYALTY_3_COEFF
 WIND_FREE_WING_COEFF = 2.60 * 30
 
 WIND_ALWAYS_EMPOWERED_CHARGE = True
@@ -846,6 +1103,7 @@ def optimize_wind_cycle(
     base = BASE_STATS_WIND[cookie].copy()
 
     equips = wind_allowed_equips()
+    equips = _resolve_equip_list_override(equip_override, equips)
     uniques = wind_allowed_uniques()
     potentials = wind_allowed_potentials()
     artifacts = wind_allowed_artifacts()
@@ -917,14 +1175,32 @@ def optimize_wind_cycle(
 # (B) 멜랑크림
 # =====================================================
 
+MELAN_PROMO_ENABLED = True
+
+MELAN_PROMO_CRIT_RATE_MULT = 1.10   # 치확 *1.10
+MELAN_PROMO_ARMOR_PEN_MULT = 1.08   # 방관 *1.08
+MELAN_PROMO_ATK_PCT_MULT   = 1.10   # 공격력% 축 *1.10
+MELAN_PROMO_FINAL_DMG_MULT = 1.05   # 최종피해 축 *1.05
+
+# 개수 증가(= 기존 계수에 "배수"로 곱)
+MELAN_PROMO_UNDEAD_EXTRA = 1        # 25%: 언데드 +1개 => 계수*(1+1)=2배(기존 1개 가정)
+MELAN_PROMO_NOVA_EXTRA   = 2        # 50%: 멜랑노바 +2개 => 계수*(1+2)=3배(기존 1개 가정)
+MELAN_PROMO_APOCALYPSE_X2 = True    # 75%: 종말 100%증가 => 2배
+
+MELAN_PRELUDE_COEFF = 5.0  # [최후의 전주곡] 500% = 5.0
+
+# 프리마 강화도 "곱"으로
+MELAN_PROMO_PRIMA_DMG_MULT = 1.25   # 프리마 피해 *1.25
+
 BASE_STATS_MELAN = {
     "멜랑크림 쿠키": {
-        "atk": 646.0,
+        "atk": 710.0,
         "elem_atk": 0.0,
-        "atk_pct": 0.0,
+        "atk_pct": 0.52, # 전용무기 포함
         "crit_rate": 0.25,
         "crit_dmg": 1.875,
-        "armor_pen": 0.0
+        "armor_pen": 0.08,
+        "final_dmg": 0.30 # 전용무기 포함
     }
 }
 
@@ -945,7 +1221,7 @@ PRIMA_ENTRY_COEFF = 11.36
 BREATH_GAIN_PER_BASIC_HIT = 0.05
 
 MELAN_CYCLE_TOKENS = [
-    "S", "U", "B4", "B4", "U",
+    "S", "B4", "U", "B4", "U",
     "S", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
@@ -1041,26 +1317,32 @@ def melan_damage_for_token(
     unit = base_damage_only(stats)
     b = {"basic": 0.0, "special": 0.0, "ult": 0.0, "passive": 0.0}
 
+    prima_mult = float(stats.get("promo_prima_dmg_mult", 1.0))
+
     if token == "B4":
         coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
 
-        # 프리마 상태 기본공격은 패시브 피해 취급
+        #  프리마돈나 상태 기본공격은 패시브 피해 취급
         mult_type = "passive" if is_prima else "basic"
 
         dmg = 0.0
         for c in coeffs:
             dmg += unit * c * skill_bonus_mult(stats, mult_type)
 
-        if is_prima:
-            b["passive"] = dmg
-        else:
-            b["basic"] = dmg
+            if is_prima:
+                hdmg *= prima_mult 
+            total_direct += hdmg
+
+            if is_prima:
+                b["passive"] = hdmg
+            else:
+                b["basic"] = hdmg
 
         return dmg, MELAN_TIME["B4"], is_prima, b
 
     if token == "S":
         if is_prima:
-            # 프리마 상태 S는 패시브 피해 취급
+            #  프리마돈나 상태 S는 패시브 피해 취급
             coeff = MELAN_SPECIAL_PRIMA_AS_PASSIVE_COEFF
             dmg = unit * coeff * skill_bonus_mult(stats, "passive")
             b["passive"] = dmg
@@ -1068,19 +1350,30 @@ def melan_damage_for_token(
         else:
             coeff = MELAN_SPECIAL_NORMAL_COEFF
             dmg = unit * coeff * skill_bonus_mult(stats, "special")
-            b["special"] = dmg
+            dmg *= prima_mult
+            # 비(프리마) 상태에 prima_mult 곱하면 안 됨
+            b["special"] += dmg
             return dmg, MELAN_TIME["S"], is_prima, b
 
     if token == "U":
+        # 프리마돈나 돌입 U에서는 최후의 전주곡 미적용
+        prelude = 0.0
+        if (not is_prima) and (not is_transform_ult):
+            prelude = unit * MELAN_PRELUDE_COEFF * skill_bonus_mult(stats, "ult")
+
         if is_transform_ult:
-            # 프리마돈나 돌입 피해는 패시브 피해 취급
+            # 프리마 돌입 피해(패시브 취급)만
             entry = unit * PRIMA_ENTRY_COEFF * skill_bonus_mult(stats, "passive")
-            b["passive"] = entry
-            return entry, MELAN_TIME["U"], True, b
+            entry *= prima_mult 
+            dmg = entry
+            b["passive"] += entry
+            return dmg, MELAN_TIME["U"], True, b
         else:
             coeff = MELAN_ULT_NORMAL_COEFF
-            dmg = unit * coeff * skill_bonus_mult(stats, "ult")
-            b["ult"] = dmg
+            ult = unit * coeff * skill_bonus_mult(stats, "ult")
+
+            dmg = ult + prelude
+            b["ult"] += ult + prelude
             return dmg, MELAN_TIME["U"], is_prima, b
 
     return 0.0, 0.0, is_prima, b
@@ -1108,11 +1401,30 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
     def passive_proc_damage(prev: float, new: float) -> float:
         unit = base_damage_only(stats)
         pdmg = 0.0
+
+        promo_on = (stats.get("_melan_promo", 0.0) > 0.0)
+
         for tier in (0.25, 0.50, 0.75):
             if prev + eps < tier <= new + eps:
                 coeff = PASSIVE_TIER_COEFF.get(tier, 0.0)
-                # 언데드/멜랑노바/종말의 도래 = 패시브 피해
-                pdmg += unit * coeff * skill_bonus_mult(stats, "passive")
+
+                # 승급 효과: 전부 곱연산
+                tier_mult = 1.0
+                if promo_on:
+                    if tier == 0.25:
+                        # 25%: 언데드 쿠키 +1개
+                        tier_mult *= (1.0 + float(MELAN_PROMO_UNDEAD_EXTRA))
+                    elif tier == 0.50:
+                        # 50%: 멜랑노바 +2개
+                        tier_mult *= (1.0 + float(MELAN_PROMO_NOVA_EXTRA))
+                    elif tier == 0.75:
+                        # 75%: 종말의 도래 피해 100% 증가 => 2배
+                        if bool(MELAN_PROMO_APOCALYPSE_X2):
+                            tier_mult *= 2.0
+
+                # 언데드/멜랑노바/종말 = 패시브 피해 배율 적용
+                pdmg += unit * coeff * tier_mult * skill_bonus_mult(stats, "passive")
+
         return pdmg
 
     def normalize_breath(x: float) -> float:
@@ -1152,7 +1464,7 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
             coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
             total_time += MELAN_TIME["B4"]
 
-            # 프리마 기본공격 = 패시브 배율
+            #  프리마 기본공격 = 패시브 배율
             mult_type = "passive" if is_prima else "basic"
 
             for c in coeffs:
