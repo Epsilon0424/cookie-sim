@@ -954,8 +954,8 @@ with st.container(key="outer_shell", border=False):
                 k2 = kind_of(cookie)
                 st.session_state[seaz_key(k2)] = ""
 
-                st.session_state[party1_key(k2)] = "없음"
-                st.session_state[party2_key(k2)] = "없음"
+                st.session_state[party1_key(k2)] = "이슬맛 쿠키"
+                st.session_state[party2_key(k2)] = "윈드파라거스 쿠키"
 
                 #  쿠키별 위젯 키도 리셋
                 st.session_state[mode_key(k2)] = "최적(자동)"
@@ -1186,7 +1186,7 @@ with st.container(key="outer_shell", border=False):
                     c1, c2, c3 = st.columns(3, gap="small")
                     c1.metric("보호막량", f"{best.get('max_shield', 0):,.0f}")
                     c2.metric("DPS", f"{best.get('dps', 0):,.4f}")
-                    c3.metric("30초 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
+                    c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
 
                 else:
                     pass
