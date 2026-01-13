@@ -5,7 +5,7 @@ import pandas as pd
 import cookie_simulator as sim
 import textwrap
 
-st.set_page_config(page_title="쿠키 최적화 시뮬레이터", layout="wide")
+st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
 STEP_FIXED = 7
 
 st.markdown(
@@ -664,7 +664,7 @@ def labeled_table_html(title: str, df: pd.DataFrame, small: bool = False, col_ra
         body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
 
-def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df, amp_df):
+def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
     html = textwrap.dedent(f"""\
 <div class="stat-grid">
   <div>{labeled_table_html("공격력", atk_df, small=False)}</div>
@@ -672,7 +672,7 @@ def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df, amp
   <div>{labeled_table_html("피해 보정", common_df, small=False)}</div>
 
   <div>{labeled_table_html("스킬 타입 피해 증가", skill_df, small=False)}</div>
-  <div>{labeled_table_html("속성 강타 피해", strike_df, small=False)}</div>
+  <div>{labeled_table_html("(파티) 보호막 / 방어", surv_df, small=False)}</div>
   <div>{labeled_table_html("(파티) 버프 / 디버프 증폭", amp_df, small=False)}</div>
 </div>
 """)
@@ -744,348 +744,115 @@ def cycle_breakdown_df(cb: dict) -> pd.DataFrame:
 # =====================================================
 # 최종스탯 그룹 (0인 항목 제거)
 # =====================================================
-def _f(stats: dict, key: str, default=0.0) -> float:
-    try:
-        return float(stats.get(key, default))
-    except Exception:
-        return float(default)
-
-def _fmt_num(x: float) -> str:
-    if abs(x) >= 1000:
-        s = f"{x:,.2f}"
-        return s.rstrip("0").rstrip(".")
-    s = f"{x:.4f}"
-    return s.rstrip("0").rstrip(".")
-
-def _fmt_pct(x: float) -> str:
-    return f"{x*100:.1f}%"
-
-def _fmt_mult(x: float) -> str:
-    try:
-        return f"x{x:.3f}".rstrip("0").rstrip(".")
-    except Exception:
-        return str(x)
-
-def build_stat_tables(stats: dict, show_sum: bool = False):
+def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     stats = stats or {}
+    party = party or []
 
-    def add_if_nonzero(rows, label, value_str, numeric_check):
+    eff = sim.summarize_effective_stats(stats).get("numeric", {})
+
+    def _f(d: dict, k: str, default=0.0) -> float:
         try:
-            if abs(float(numeric_check)) < 1e-12:
+            return float(d.get(k, default))
+        except Exception:
+            return float(default)
+
+    def _fmt_num(x: float) -> str:
+        if abs(x) >= 1000:
+            s = f"{x:,.2f}"
+            return s.rstrip("0").rstrip(".")
+        s = f"{x:.4f}"
+        return s.rstrip("0").rstrip(".")
+
+    def _fmt_pct(x: float) -> str:
+        return f"{x*100:.1f}%"
+
+    def add_if_nonzero(rows, label, value_str, numeric_check, eps=1e-12):
+        try:
+            if abs(float(numeric_check)) < eps:
                 return
         except Exception:
             return
         rows.append([label, value_str])
 
     # =========================
-    # 1) 요약(유효값) 가져오기
+    # 공격력 (표시=합, 최종공격력 계산=곱환산)
     # =========================
-    summary = None
-    if hasattr(sim, "summarize_effective_stats"):
-        try:
-            summary = sim.summarize_effective_stats(stats)
-        except Exception:
-            summary = None
-
-    if summary:
-        num = summary["numeric"]
-
-        # 공격력 축
-        OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
-        EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
-
-        equip_atk_mult = float(num.get("equip_atk_mult", 1.0))
-        buff_atk_mult  = float(num.get("buff_atk_mult", 1.0))
-        atk_pct_total_equiv = (equip_atk_mult * buff_atk_mult) - 1.0
-
-        final_atk_mult_add = float(num.get("final_atk_mult_add", 0.0))
-        final_atk_input = (OA + EA) * (1.0 + atk_pct_total_equiv) * (1.0 + final_atk_mult_add)
-
-        # 치명
-        crit_rate_eff = float(num.get("eff_crit_rate", 0.0))
-        crit_dmg_eff  = float(num.get("eff_crit_dmg", 1.0))
-
-        # 피해 보정
-        all_elem_total = float(num.get("eff_all_elem_dmg", 0.0))
-        armor_pen_eff  = float(num.get("eff_armor_pen", 0.0))
-        def_red_eff    = float(num.get("eff_def_reduction", 0.0))
-        elem_res_red_eff = float(num.get("eff_elem_res_reduction", 0.0))
-        mark_res_red_eff = float(num.get("eff_mark_res_reduction", 0.0))
-
-        dmg_bonus = float(num.get("dmg_bonus", 0.0))
-
-        # 최종피해: (1+final_dmg) * promo_final_dmg_mult - 1 로 “총합 환산”
-        final_dmg_add = float(num.get("final_dmg_add", 0.0))
-        promo_final_mult = float(num.get("promo_final_dmg_mult", 1.0))
-        final_dmg_total_as_add = float(num.get("final_dmg_total_as_add", 0.0))
-
-        # 증폭
-        buff_amp = float(num.get("buff_amp", 0.0))
-        debuff_amp = float(num.get("debuff_amp", 0.0))
-
-        # 스킬 타입
-        basic_dmg   = _f(stats, "basic_dmg", 0.0)
-        special_dmg = _f(stats, "special_dmg", 0.0)
-        ult_dmg     = _f(stats, "ult_dmg", 0.0)
-        passive_dmg = _f(stats, "passive_dmg", 0.0)
-
-        # 속성강타 피해 증가
-        strike = float(num.get("element_strike_dmg", 0.0))
-
-        # -------------------------
-        # 표 만들기
-        # -------------------------
-        atk_df = pd.DataFrame(
-            [
-                ["OA(기본공)", _fmt_num(OA)],
-                ["EA(속성공)", _fmt_num(EA)],
-                ["공격력%", _fmt_pct(atk_pct_total_equiv)],
-                ["공격력 증가%", _fmt_pct(final_atk_mult_add)],
-                ["최종 공격력", _fmt_num(final_atk_input)],
-            ],
-            columns=["항목", "값"],
-        )
-
-        g2 = []
-        add_if_nonzero(g2, "치명타 확률", _fmt_pct(crit_rate_eff), crit_rate_eff)
-        add_if_nonzero(g2, "치명타 피해", _fmt_pct(crit_dmg_eff), crit_dmg_eff)
-        crit_df = pd.DataFrame(g2, columns=["항목", "값"])
-
-        # 공통(피해 보정)
-        g3 = []
-        add_if_nonzero(g3, "속성 피해", _fmt_pct(all_elem_total), all_elem_total)
-        add_if_nonzero(g3, "방어력 관통", _fmt_pct(armor_pen_eff), armor_pen_eff)
-        add_if_nonzero(g3, "방깎", _fmt_pct(def_red_eff), def_red_eff)
-        add_if_nonzero(g3, "속성내성감소", _fmt_pct(elem_res_red_eff), elem_res_red_eff)
-        add_if_nonzero(g3, "표식저항감소", _fmt_pct(mark_res_red_eff), mark_res_red_eff)
-
-        add_if_nonzero(g3, "피해량", _fmt_pct(dmg_bonus), dmg_bonus)
-
-        # 최종피해 표시(가산/승급배율/총합환산)
-        final_dmg_total_as_add = (1+final_dmg_add) * promo_final_mult - 1
-        add_if_nonzero(g3, "최종피해", _fmt_pct(final_dmg_total_as_add), final_dmg_total_as_add)
-
-        common_df = pd.DataFrame(g3, columns=["항목", "값"])
-
-        #  버프 / 디버프 증폭
-        g6 = []
-        add_if_nonzero(g6, "버프 증폭", _fmt_pct(buff_amp), buff_amp)
-        add_if_nonzero(g6, "디버프 증폭", _fmt_pct(debuff_amp), debuff_amp)
-        amp_df = pd.DataFrame(g6, columns=["항목", "값"])
-
-        g4 = []
-        add_if_nonzero(g4, "기본 공격 피해", _fmt_pct(basic_dmg), basic_dmg)
-        add_if_nonzero(g4, "특수스킬 피해", _fmt_pct(special_dmg), special_dmg)
-        add_if_nonzero(g4, "궁극기 피해", _fmt_pct(ult_dmg), ult_dmg)
-        add_if_nonzero(g4, "패시브 피해", _fmt_pct(passive_dmg), passive_dmg)
-        skill_df = pd.DataFrame(g4, columns=["항목", "값"])
-
-        g5 = []
-        add_if_nonzero(g5, "속성 강타 피해", _fmt_pct(strike), strike)
-        strike_df = pd.DataFrame(g5, columns=["항목", "값"])
-
-        return atk_df, crit_df, common_df, skill_df, strike_df, amp_df
-
-    # =========================
-    # 2) fallback: (요약함수 없을 때) 기존 로직 유지
-    # =========================
-    promo_cr_mult   = _f(stats, "promo_crit_rate_mult", 1.0)
-
     OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
     EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
 
-    promo_atk_mult = _f(stats, "promo_atk_pct_mult", 1.0)
-    equip_atk_mult = (1.0 + _f(stats, "base_atk_pct", 0.0) + _f(stats, "atk_pct", 0.0)) * promo_atk_mult
-    buff_atk_mult  = _f(stats, "buff_atk_mult", 1.0)
+    atk_pct_sum   = float(eff.get("atk_pct_sum", 0.0))
+    atk_pct_equiv = float(eff.get("atk_pct_equiv", 0.0))
+    final_atk_add = float(eff.get("final_atk_mult_add", 0.0))
 
-    atk_pct_total_equiv = (equip_atk_mult * buff_atk_mult) - 1.0
-    final_atk_mult = _f(stats, "final_atk_mult", 0.0)
-    final_atk_input = (OA + EA) * (1.0 + atk_pct_total_equiv) * (1.0 + final_atk_mult)
+    # 최종 공격력(수치)은 “실제 배율”로 계산
+    final_atk_input = (OA + EA) * (1.0 + atk_pct_equiv) * (1.0 + final_atk_add)
 
-    cr_base = _f(stats, "crit_rate", 0.0)
-    cr_buff = _f(stats, "buff_crit_rate_raw", 0.0)
-    crit_rate_eff = max(0.0, min(1.0, cr_base * promo_cr_mult + cr_buff))
-
-    cd_base = _f(stats, "crit_dmg", 1.0)
-    cd_buff = _f(stats, "buff_crit_dmg_raw", 0.0)
-    cd_total = max(1.0, cd_base + cd_buff)
-
-    all_elem_total = _f(stats, "all_elem_dmg", 0.0) + _f(stats, "buff_all_elem_dmg_raw", 0.0)
-
-    promo_ap_mult = _f(stats, "promo_armor_pen_mult", 1.0)
-    armor_pen = max(0.0, min(0.8, _f(stats, "armor_pen", 0.0) * promo_ap_mult))
-
-    def_reduction_raw = _f(stats, "def_reduction_raw", 0.0)
-
-    promo_final_mult = _f(stats, "promo_final_dmg_mult", 1.0)
-    final_dmg_base = _f(stats, "final_dmg", 0.0)
-
-    if show_sum:
-        final_dmg_eff = final_dmg_base + (promo_final_mult - 1.0)
-    else:
-        final_dmg_eff = (1.0 + final_dmg_base) * promo_final_mult - 1.0
-
-    basic_dmg   = _f(stats, "basic_dmg", 0.0)
-    special_dmg = _f(stats, "special_dmg", 0.0)
-    ult_dmg     = _f(stats, "ult_dmg", 0.0)
-    passive_dmg = _f(stats, "passive_dmg", 0.0)
-
-    strike = stats.get("element_strike_dmg", stats.get("element_strike", 0.0))
-    try:
-        strike = float(strike)
-    except Exception:
-        strike = 0.0
-
-    # 2) fallback : 기존 로직 유지
-    promo_cr_mult   = _f(stats, "promo_crit_rate_mult", 1.0)
-
-    # --- 기본 공격력 구성 ---
-    OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
-    EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
-
-    # --- 공격력% (장비스탯축 / 버프축) ---
-    # 장비/잠재 등 "base_atk_pct + atk_pct"는 장비스탯축으로 보고,
-    # 파티/시즈/버프에서 오는 공격력%는 stats["buff_atk_mult"]에 반영되어 있다고 가정
-    promo_atk_mult = _f(stats, "promo_atk_pct_mult", 1.0)
-
-    equip_atk_add = _f(stats, "base_atk_pct", 0.0) + _f(stats, "atk_pct", 0.0)  # 가산(+)
-    equip_atk_mult = (1.0 + equip_atk_add) * promo_atk_mult
-
-    buff_atk_mult  = _f(stats, "buff_atk_mult", 1.0)
-
-    # UI에 표시할 "공퍼(장비스탯축)" / "공퍼(버프축)" / "공퍼(합)"
-    equip_atk_pct_total = equip_atk_mult - 1.0
-    buff_atk_pct_total  = buff_atk_mult  - 1.0
-    atk_pct_total_equiv = (equip_atk_mult * buff_atk_mult) - 1.0
-
-    # --- 최종공 ---
-    final_atk_mult = _f(stats, "final_atk_mult", 0.0)  # 가산(+)
-    final_atk_input = (OA + EA) * (1.0 + atk_pct_total_equiv) * (1.0 + final_atk_mult)
-
-    # --- 치명 ---
-    cr_base = _f(stats, "crit_rate", 0.0)
-    cr_buff = _f(stats, "buff_crit_rate_raw", 0.0)
-    crit_rate_eff = max(0.0, min(1.0, cr_base * promo_cr_mult + cr_buff))
-
-    cd_base = _f(stats, "crit_dmg", 1.0)              # 배율(예: 1.875)
-    cd_buff = _f(stats, "buff_crit_dmg_raw", 0.0)     # 배율 가산(+0.56 등)
-    cd_total = max(1.0, cd_base + cd_buff)
-
-    # UI에서 "288.5%" 같은 형태로 찍고 싶으면
-    # cd_total(=2.885)를 그대로 퍼센트 포맷에 넣으면 288.5%로 보임.
-    crit_dmg_eff = cd_total
-
-    # --- 공통(피해 보정) ---
-    all_elem_total = _f(stats, "all_elem_dmg", 0.0) + _f(stats, "buff_all_elem_dmg_raw", 0.0)
-
-    promo_ap_mult = _f(stats, "promo_armor_pen_mult", 1.0)
-    armor_pen = max(0.0, min(0.8, _f(stats, "armor_pen", 0.0) * promo_ap_mult))
-
-    def_reduction_raw = _f(stats, "def_reduction_raw", 0.0)
-
-    # 없으면 0으로
-    elem_res_red_eff = _f(stats, "elem_res_red_eff", _f(stats, "elem_res_red", 0.0))
-    mark_res_red_eff = _f(stats, "mark_res_red_eff", _f(stats, "mark_res_red", 0.0))
-
-    dmg_bonus = _f(stats, "dmg_bonus", 0.0) + _f(stats, "buff_dmg_bonus_raw", 0.0)
-
-    # --- 최종피해(표시용) ---
-    promo_final_mult = _f(stats, "promo_final_dmg_mult", 1.0)
-    final_dmg_base = _f(stats, "final_dmg", 0.0)
-
-    # "승급배율과 별개로" 가산 최종피해
-    # (버프에서 오는 최종피해가 따로 있으면 여기에 더해도 됨)
-    final_dmg_add = final_dmg_base + _f(stats, "buff_final_dmg_raw", 0.0)
-
-    # --- 스킬 피해(가산) ---
-    basic_dmg   = _f(stats, "basic_dmg", 0.0)
-    special_dmg = _f(stats, "special_dmg", 0.0)
-    ult_dmg     = _f(stats, "ult_dmg", 0.0)
-    passive_dmg = _f(stats, "passive_dmg", 0.0)
-
-    # --- 강타 ---
-    strike = stats.get("element_strike_dmg", stats.get("element_strike", 0.0))
-    try:
-        strike = float(strike)
-    except Exception:
-        strike = 0.0
-
-    # --- 증폭(표시용) ---
-    buff_amp   = _f(stats, "buff_amp", 0.0) + _f(stats, "buff_amp_raw", 0.0)
-    debuff_amp = _f(stats, "debuff_amp", 0.0) + _f(stats, "debuff_amp_raw", 0.0)
+    atk_rows = []
+    add_if_nonzero(atk_rows, "OA(기본공)", _fmt_num(OA), OA)
+    add_if_nonzero(atk_rows, "EA(속성공)", _fmt_num(EA), EA)
+    add_if_nonzero(atk_rows, "공격력%", _fmt_pct(atk_pct_sum), atk_pct_sum)
+    add_if_nonzero(atk_rows, "공격력 증가%", _fmt_pct(final_atk_add), final_atk_add)
+    add_if_nonzero(atk_rows, "최종 공격력", _fmt_num(final_atk_input), final_atk_input)
+    atk_df = pd.DataFrame(atk_rows, columns=["항목", "값"])
 
     # =========================
-    # [표시 alias] (DataFrame 만들기 전에 반드시!)
+    # 치명 (이미 합 표시 형태라 유지)
     # =========================
-    final_atk_mult_add = final_atk_mult
-    armor_pen_eff = armor_pen
-    def_red_eff   = def_reduction_raw
+    crit_rows = []
+    add_if_nonzero(crit_rows, "치명타 확률", _fmt_pct(float(eff.get("eff_crit_rate", 0.0))), float(eff.get("eff_crit_rate", 0.0)))
 
+    cd_eff = float(eff.get("eff_crit_dmg", 1.0))
+    add_if_nonzero(crit_rows, "치명타 피해", _fmt_pct(cd_eff - 1.0), cd_eff - 1.0)
+    crit_df = pd.DataFrame(crit_rows, columns=["항목", "값"])
 
-    def _fmt_add_and_mult(add: float) -> str:
-        """
-        add: 가산값(예: 0.224)
-        출력: "22.4% (x1.224)" 형태
-        """
-        try:
-            add = float(add)
-        except Exception:
-            add = 0.0
-        mult = 1.0 + add
-        return f"{add*100:.1f}% (x{mult:.3f})"
-    
     # =========================
-    # DataFrames
+    # 피해 보정 (전부 “합”으로 표시)
     # =========================
-    atk_df = pd.DataFrame(
-        [
-            ["OA(기본공)", _fmt_num(OA)],
-            ["EA(속성공)", _fmt_num(EA)],
-            ["공격력%", _fmt_pct(atk_pct_total_equiv)],
-            ["공격력 증가%", _fmt_pct(final_atk_mult_add)],
-            ["최종 공격력", _fmt_num(final_atk_input)],
-        ],
-        columns=["항목", "값"],
-    )
+    common_rows = []
+    add_if_nonzero(common_rows, "모든 속성 피해", _fmt_pct(float(eff.get("eff_all_elem_dmg", 0.0))), float(eff.get("eff_all_elem_dmg", 0.0)))
+    add_if_nonzero(common_rows, "방어력 관통", _fmt_pct(float(eff.get("eff_armor_pen", 0.0))), float(eff.get("eff_armor_pen", 0.0)))
 
-    g2 = []
-    add_if_nonzero(g2, "치명타 확률", _fmt_pct(crit_rate_eff), crit_rate_eff)
-    add_if_nonzero(g2, "치명타 피해", _fmt_pct(crit_dmg_eff), crit_dmg_eff)
-    crit_df = pd.DataFrame(g2, columns=["항목", "값"])
+    add_if_nonzero(common_rows, "방어력 감소", _fmt_pct(float(eff.get("eff_def_reduction", 0.0))), float(eff.get("eff_def_reduction", 0.0)))
+    add_if_nonzero(common_rows, "속성 내성 감소", _fmt_pct(float(eff.get("eff_elem_res_reduction", 0.0))), float(eff.get("eff_elem_res_reduction", 0.0)))
+    add_if_nonzero(common_rows, "표식 저항 감소", _fmt_pct(float(eff.get("eff_mark_res_reduction", 0.0))), float(eff.get("eff_mark_res_reduction", 0.0)))
 
-    # 공통(피해 보정) - 증폭은 여기서 빼서 amp_df로 따로 만든다
-    g3 = []
-    add_if_nonzero(g3, "속성 피해", _fmt_pct(all_elem_total), all_elem_total)
-    add_if_nonzero(g3, "방어력 관통", _fmt_pct(armor_pen_eff), armor_pen_eff)
-    add_if_nonzero(g3, "방깎", _fmt_pct(def_red_eff), def_red_eff)
-    add_if_nonzero(g3, "속성내성감소", _fmt_pct(elem_res_red_eff), elem_res_red_eff)
-    add_if_nonzero(g3, "표식저항감소", _fmt_pct(mark_res_red_eff), mark_res_red_eff)
-    add_if_nonzero(g3, "피해량", _fmt_pct(dmg_bonus), dmg_bonus)
+    add_if_nonzero(common_rows, "피해량", _fmt_pct(float(eff.get("dmg_bonus", 0.0))), float(eff.get("dmg_bonus", 0.0)))
 
-    # 최종피해 표시(가산/승급배율/총합환산)
-    final_dmg_total_as_add = (1.0 + final_dmg_add) * promo_final_mult - 1.0
-    add_if_nonzero(g3, "최종피해", _fmt_pct(final_dmg_total_as_add), final_dmg_total_as_add)
+    # ✅ 최종피해도 “합”으로 표시
+    add_if_nonzero(common_rows, "최종 피해", _fmt_pct(float(eff.get("final_dmg_sum", 0.0))), float(eff.get("final_dmg_sum", 0.0)))
 
-    common_df = pd.DataFrame(g3, columns=["항목", "값"])
+    # 속성강타 피해 증가도 합(가산) 항목이니 여기 넣어도 됨
+    add_if_nonzero(common_rows, "속성강타 피해", _fmt_pct(float(eff.get("element_strike_dmg", 0.0))), float(eff.get("element_strike_dmg", 0.0)))
 
-    #  버프 / 디버프 증폭
-    g6 = []
-    add_if_nonzero(g6, "버프 증폭", _fmt_pct(buff_amp), buff_amp)
-    add_if_nonzero(g6, "디버프 증폭", _fmt_pct(debuff_amp), debuff_amp)
-    amp_df = pd.DataFrame(g6, columns=["항목", "값"])
+    common_df = pd.DataFrame(common_rows, columns=["항목", "값"])
 
-    g4 = []
-    add_if_nonzero(g4, "기본 공격 피해", _fmt_pct(basic_dmg), basic_dmg)
-    add_if_nonzero(g4, "특수스킬 피해", _fmt_pct(special_dmg), special_dmg)
-    add_if_nonzero(g4, "궁극기 피해", _fmt_pct(ult_dmg), ult_dmg)
-    add_if_nonzero(g4, "패시브 피해", _fmt_pct(passive_dmg), passive_dmg)
-    skill_df = pd.DataFrame(g4, columns=["항목", "값"])
+    # =========================
+    # 스킬 타입 피해 증가(그대로 가산)
+    # =========================
+    skill_rows = []
+    add_if_nonzero(skill_rows, "기본공격 피해", _fmt_pct(_f(stats, "basic_dmg", 0.0)), _f(stats, "basic_dmg", 0.0))
+    add_if_nonzero(skill_rows, "특수스킬 피해", _fmt_pct(_f(stats, "special_dmg", 0.0)), _f(stats, "special_dmg", 0.0))
+    add_if_nonzero(skill_rows, "궁극기 피해", _fmt_pct(_f(stats, "ult_dmg", 0.0)), _f(stats, "ult_dmg", 0.0))
+    add_if_nonzero(skill_rows, "패시브 피해", _fmt_pct(_f(stats, "passive_dmg", 0.0)), _f(stats, "passive_dmg", 0.0))
+    skill_df = pd.DataFrame(skill_rows, columns=["항목", "값"])
 
-    g5 = []
-    add_if_nonzero(g5, "속성 강타 피해", _fmt_pct(strike), strike)
-    strike_df = pd.DataFrame(g5, columns=["항목", "값"])
+    # =========================
+    # 보호막/방어 (가산)
+    # =========================
+    surv_rows = []
+    add_if_nonzero(surv_rows, "보호막 %", _fmt_pct(_f(stats, "shield_pct", 0.0)), _f(stats, "shield_pct", 0.0))
+    add_if_nonzero(surv_rows, "방어력 %", _fmt_pct(_f(stats, "def_pct", 0.0)), _f(stats, "def_pct", 0.0))
+    surv_df = pd.DataFrame(surv_rows, columns=["항목", "값"])
 
-    return atk_df, crit_df, common_df, skill_df, strike_df, amp_df
+    # =========================
+    # 버프/디버프 증폭 (가산)
+    # =========================
+    amp_rows = []
+    add_if_nonzero(amp_rows, "버프 증폭", _fmt_pct(float(eff.get("buff_amp", 0.0))), float(eff.get("buff_amp", 0.0)))
+    add_if_nonzero(amp_rows, "디버프 증폭", _fmt_pct(float(eff.get("debuff_amp", 0.0))), float(eff.get("debuff_amp", 0.0)))
+    amp_df = pd.DataFrame(amp_rows, columns=["항목", "값"])
+
+    return atk_df, crit_df, common_df, skill_df, surv_df, amp_df
 
 # =====================================================
 #  추가: 장비 선택 모드/장비 위젯 키 (쿠키별 분리)
@@ -1336,7 +1103,11 @@ with st.container(key="outer_shell", border=False):
                     p = max(0.0, min(1.0, float(p)))
                     progress_slot.markdown(_progress_html(int(p * 100)), unsafe_allow_html=True)
 
-                #  장비 선택 모드에 따른 장비 override
+                # 초기화 (UnboundLocalError 방지)
+                best = None
+                best_kind = None
+
+                # 장비 선택 모드에 따른 override
                 equip_override_local = None
                 if st.session_state.mode == "선택(수동)":
                     equip_override_local = st.session_state.equip or None
@@ -1347,7 +1118,7 @@ with st.container(key="outer_shell", border=False):
                         party=st.session_state.party,
                         step=STEP_FIXED,
                         progress_cb=cb,
-                        equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
+                        equip_override=equip_override_local,
                     )
                     best_kind = "wind"
 
@@ -1357,17 +1128,28 @@ with st.container(key="outer_shell", border=False):
                         party=st.session_state.party,
                         step=STEP_FIXED,
                         progress_cb=cb,
-                        equip_override=equip_override_local,   #  추가 (sim도 수정 필요)
+                        equip_override=equip_override_local,
                     )
                     best_kind = "melan"
 
-                else:
-                    best = sim.optimize_isle_shards_only(st.session_state.party)
+                elif kind_cookie == "isle":
+                    best = sim.optimize_isle_cycle(
+                        seaz_name=st.session_state.seaz,
+                        party=st.session_state.party,
+                        step=STEP_FIXED,
+                        progress_cb=cb,
+                        equip_override=equip_override_local,
+                    )
                     best_kind = "isle"
+
+                    # --- 고정값 ---
                     if isinstance(best, dict):
-                        best.setdefault("potentials", {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4})
-                        best.setdefault("unique_fixed", "정화된 에메랄딘의 기억")
-                        best.setdefault("artifact_fixed", "비에 젖은 과거")
+                        best["potentials"] = {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}  # 고정
+                        best["unique_fixed"] = "정화된 에메랄딘의 기억"
+                        best["artifact_fixed"] = "비에 젖은 과거"
+
+                else:
+                    raise ValueError(f"지원하지 않는 kind_cookie: {kind_cookie}")
 
                 progress_slot.markdown(_progress_html(100), unsafe_allow_html=True)
                 return best, best_kind
@@ -1399,15 +1181,20 @@ with st.container(key="outer_shell", border=False):
                     c1.metric("DPS", f"{best.get('dps', 0):,.4f}")
                     c2.metric("1사이클 시간(s)", f"{best.get('cycle_total_time', 0):,.4f}")
                     c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
-                else:
-                    c1, c2 = st.columns(2, gap="small")
-                    c1.metric("최종 공격력", f"{best.get('final_atk', 0):,.0f}")
-                    c2.metric("최대 보호막", f"{best.get('max_shield', 0):,.0f}")
 
-                if kind in ("wind", "melan"):
+                elif kind == "isle":
+                    c1, c2, c3 = st.columns(3, gap="small")
+                    c1.metric("보호막량", f"{best.get('max_shield', 0):,.0f}")
+                    c2.metric("DPS", f"{best.get('dps', 0):,.4f}")
+                    c3.metric("30초 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
+
+                else:
+                    pass
+
+                if kind in ("wind", "melan", "isle"):
                     tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
                 else:
-                    tab1 = st.tabs(["결과"])[0]
+                    tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
 
                 with tab1:
                     def make_setting_df(best: dict, kind: str) -> pd.DataFrame:
@@ -1427,7 +1214,7 @@ with st.container(key="outer_shell", border=False):
                             add(rows, "유니크 조각", best.get("unique", ""))
                             add(rows, "아티팩트", best.get("artifact", ""))
                             add(rows, "파티", party_txt)
-                        else:
+                        elif kind in ("isle"):
                             add(rows, "장비 선택 모드", st.session_state.mode) 
                             add(rows, "쿠키", "이슬맛 쿠키")
                             add(rows, "장비", best.get("equip_fixed", ""))
@@ -1435,6 +1222,8 @@ with st.container(key="outer_shell", border=False):
                             add(rows, "유니크 조각", best.get("unique_fixed", "정화된 에메랄딘의 기억"))
                             add(rows, "아티팩트", best.get("artifact_fixed", "비에 젖은 과거"))
                             add(rows, "파티", party_txt)
+                        else:
+                            pass
 
                         return pd.DataFrame(rows, columns=["항목", "값"])
 
@@ -1443,10 +1232,12 @@ with st.container(key="outer_shell", border=False):
                     if kind in ("wind", "melan"):
                         p_df = pretty_potentials(best.get("potentials", {}))
                         s_df = pretty_shards(best.get("shards", {}))
-                    else:
+                    elif kind in ("isle"):
                         pot = best.get("potentials") or {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
                         p_df = pretty_potentials(pot)
                         s_df = pretty_shards(best.get("shards", {}))
+                    else:
+                        pass
 
                     html = f"""
                     <div class="summary-grid">
@@ -1457,22 +1248,20 @@ with st.container(key="outer_shell", border=False):
                     """
                     st.markdown(html, unsafe_allow_html=True)
 
-                if kind in ("wind", "melan"):
+                if kind in ("wind", "melan", "isle"):
                     with tab2:
                         stats = best.get("stats", {})
                         if not stats:
                             st.caption("스탯 정보가 없습니다.")
                         else:
-                            # 토글 값은 세션에서 읽어서 전달
-                            show_sum_val = st.session_state.get(f"show_sum__{kind}", False)
-
-                            atk_df, crit_df, common_df, skill_df, strike_df, amp_df = build_stat_tables(
-                                stats,
-                                show_sum=show_sum_val,
+                            atk_df, crit_df, common_df, skill_df, surv_df, amp_df = build_stat_tables(
+                                best["stats"],
+                                best.get("cookie", ""),
+                                best.get("party", st.session_state.party)
                             )
-                            render_final_stats_grid(atk_df, crit_df, common_df, skill_df, strike_df, amp_df)
+                            render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df)
 
-                if kind in ("wind", "melan"):
+                if kind in ("wind", "melan","isle"):
                     with tab3:
                         cb = best.get("cycle_breakdown", {})
                         df = cycle_breakdown_df(cb)
@@ -1495,10 +1284,12 @@ st.markdown(
 <div class="global-note">
   <div class="note-title">Notes</div>
   <p class="note-text">
-    • 화면에 보이는 대부분의 수치는 <b>가산(+)</b>으로 누적된 합입니다.<br/>
-    • 하지만 실제 계산에서는 일부 항목이 <b>배율(×)</b>로 적용됩니다.<br/>
-    • 따라서 UI의 퍼센트 <b>합</b>과, 최종 공식에 들어가는 <b>최종 배율(×)</b>은 서로 다를 수 있습니다.<br/>
-    • 기타 문의 : <b>Epsilon24@gmail.com</b><br/>
+    • 화면에 표시되는 수치는 대부분 <b>가산(+)</b>으로 누적된 <b>합</b>입니다.<br/>
+    • 단, 일부 스탯은 <b>배율(×)</b>로 곱해져 적용되며, <b>승급 스탯은 전부 배율(×)</b>로 계산됩니다.<br/>
+    • 그래서 단순 <b>합(+)</b>만으로 계산하면 실제 적용값과 <b>차이</b>가 날 수 있습니다.<br/>
+    • 균열저항력은 권장 수치보다 낮으면 피해가 감소, 높으면 피해가 증가하며, 차이가 클수록 효과가 더 커집니다.<br/>
+    • 다만 정확한 증감 수치를 확인하지 못해 계산에 반영하지 않았고, 실제 전투 총 딜과 차이가 날 수 있습니다.<br/>
+    • 기타 문의 : <b>Epsilon24@gmail.com</b>
   </p>
 </div>
 """,
