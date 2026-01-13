@@ -12,14 +12,33 @@ st.markdown(
 """
 <style>
 /* =====================================================
-   0) Variables (색/간격/그림자)
+   0) Font (Pretendard) + Variables
 ===================================================== */
+@import url("https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css");
+
 :root{
+  /* Font */
+  --FONT_FAMILY: "Pretendard", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                 "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Helvetica Neue",
+                 Arial, sans-serif;
+
+  --FS_APP: 14px;   /* 14 -> 13 */
+  --FS_XS: 11px;    /* 11 -> 10 */
+  --FS_SM: 12px;    /* 12 -> 11 */
+  --FS_MD: 13px;    /* 13 -> 12 */
+  --FS_LG: 16px;    /* 16 -> 15 */
+  --FS_XL: 19px;    /* 22 -> 20 */
+
+  --FW_R: 500;
+  --FW_M: 600;
+  --FW_B: 700;
+  --FW_XB: 800;
+
   /* Page */
   --PAGE_BG: #f3f4f6;
 
   /* Outer shell */
-  --SHELL_BG: #f9fafb;              /* 더 회색: #f1f5f9 / 더 밝게: #fafafa */
+  --SHELL_BG: #f9fafb;
   --SHELL_RADIUS: 16px;
   --SHELL_SHADOW: 0 8px 24px rgba(0,0,0,0.06);
 
@@ -29,15 +48,15 @@ st.markdown(
   --PANEL_RADIUS: 14px;
   --PANEL_PAD: 18px;
 
-  /* Cards (기본 border=True 카드들) */
+  /* Cards */
   --CARD_BG: #ffffff;
   --CARD_RADIUS: 14px;
   --CARD_SHADOW: 0 8px 24px rgba(0,0,0,0.06);
 
   /* Selectbox */
-  --SEL_H: 30px;
+  --SEL_H: 34px;
   --SEL_FONT: 13px;
-  --MENU_FONT: 13px;
+  --MENU_FONT: 12px;
 
   /* Layout */
   --COL_GAP: 1.0rem;
@@ -46,13 +65,25 @@ st.markdown(
   /* Accent */
   --accent: #ff3434;
   --accent-soft: rgba(255,52,52,0.10);
+
+  /* Progress */
+  --PROG_H: 16px;
+  --PROG_BG: #e5e7eb;
+  --PROG_BORDER: #d1d5db;
+  --PROG_FG1: #4b5563;   /* 다크 그레이 */
+  --PROG_FG2: #111827;   /* 더 진한 그레이 */
 }
 
 /* =====================================================
-   1) Page base
+   1) Global font apply
 ===================================================== */
 html, body, [data-testid="stAppViewContainer"]{
+  font-family: var(--FONT_FAMILY) !important;
+  font-size: var(--FS_APP) !important;
   background: var(--PAGE_BG) !important;
+}
+[data-testid="stAppViewContainer"] *{
+  font-family: var(--FONT_FAMILY) !important;
 }
 
 /* Main container */
@@ -69,12 +100,10 @@ section.main > div.block-container,
 }
 
 /* Header */
-header[data-testid="stHeader"]{
-  background: transparent !important;
-}
+header[data-testid="stHeader"]{ background: transparent !important; }
 
 /* =====================================================
-   2) Outer shell (전체 큰 배경 박스)
+   2) Outer shell
 ===================================================== */
 .st-key-outer_shell{
   background: var(--SHELL_BG) !important;
@@ -83,8 +112,6 @@ header[data-testid="stHeader"]{
   box-shadow: var(--SHELL_SHADOW) !important;
   padding: 18px !important;
 }
-
-/* outer 내부는 카드화 방지 */
 .st-key-outer_shell > div{
   background: transparent !important;
   border: 0 !important;
@@ -93,7 +120,7 @@ header[data-testid="stHeader"]{
 }
 
 /* =====================================================
-   3) Layout columns (좌/우 정렬 + 간격)
+   3) Layout columns
 ===================================================== */
 div[data-testid="stHorizontalBlock"]{
   gap: var(--COL_GAP) !important;
@@ -102,7 +129,6 @@ div[data-testid="stHorizontalBlock"]{
 
 /* =====================================================
    4) Default cards (border=True 컨테이너 공통)
-   - panel_select / panel_result 는 별도로 처리
 ===================================================== */
 div[data-testid="stVerticalBlockBorderWrapper"]{
   background: var(--CARD_BG) !important;
@@ -121,8 +147,6 @@ div[data-testid="stVerticalBlockBorderWrapper"]{
   box-shadow: none !important;
   padding: var(--PANEL_PAD) !important;
 }
-
-/* panel 내부 흰색 덮임 방지 */
 .st-key-panel_select > div,
 .st-key-panel_result > div{
   background: transparent !important;
@@ -133,70 +157,73 @@ div[data-testid="stVerticalBlockBorderWrapper"]{
 }
 
 /* =====================================================
-   5) Typography
+   5) Typography (크기/두께만 튜닝)
 ===================================================== */
 .h-title{
-  font-size: 18px;
-  font-weight: 800;
+  font-size: var(--FS_LG);
+  font-weight: var(--FW_XB);
+  letter-spacing: -0.2px;
   margin: 0 0 2px 0;
 }
-.h-sub{
-  font-size: 12px;
-  color: #6b7280;
-  margin: 0 0 0px 0;
+.title-card .h-title{
+  font-size: var(--FS_XL);
+  letter-spacing: -0.35px;
 }
-.h-meta{
-  font-size: 12px;
+/* 타이틀 카드 안내문(2줄) = Notes 본문 크기랑 동일하게 */
+.title-card .h-sub,
+.title-card .h-meta{
+  font-size: var(--FS_SM) !important;   /* Notes와 동일 */
+  line-height: 1.55 !important;        /* Notes와 동일한 느낌 */
+  font-weight: 600 !important;         /* Notes처럼 가볍게 */
   color: #6b7280;
-  margin: 0 0 6px 0;
+}
+
+/* metric */
+div[data-testid="stMetricLabel"]{
+  font-size: var(--FS_SM) !important;
+  font-weight: var(--FW_B) !important;
+  color: #6b7280 !important;
 }
 div[data-testid="stMetricValue"]{
-  font-size: 20px;
+  font-size: 20px !important;
+  font-weight: var(--FW_XB) !important;
+  letter-spacing: -0.2px !important;
 }
-:root{
-  --TAB_FONT: 13px;
-  --TAB_WEIGHT: 750;
-}
+
+/* tabs */
+:root{ --TAB_FONT: 13px; --TAB_WEIGHT: 750; }
 div[data-testid="stTabs"] button[data-baseweb="tab"],
 div[data-testid="stTabs"] button[data-baseweb="tab"] *{
   font-size: var(--TAB_FONT) !important;
   font-weight: var(--TAB_WEIGHT) !important;
 }
-/* caption */
 [data-testid="stCaptionContainer"]{
-  font-size: 12px !important;
-  line-height: 1.4 !important;
+  font-size: var(--FS_SM) !important;
+  line-height: 1.45 !important;
 }
 
+/* title card */
 .title-card{
   background: var(--SHELL_BG) !important;
   border-radius: var(--CARD_RADIUS) !important;
   box-shadow: var(--CARD_SHADOW) !important;
-
   padding: 14px 18px !important;
   margin: 0 0 14px 0 !important;
-
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
-
-/* 카드 안 텍스트 기본 margin 제거(여백 흔들림 방지) */
 .title-card .h-title,
 .title-card .h-sub,
-.title-card .h-meta{
-  margin: 0 !important;
-}
-
-.title-card{ gap: 2px; }
-.title-card .h-sub{ margin-bottom: 0px !important; }
+.title-card .h-meta{ margin: 0 !important; }
+.title-card{ gap: 3px; }
 
 /* =====================================================
    6) Select UI
 ===================================================== */
 .ctl-label{
-  font-size: 14px !important;
-  font-weight: 800 !important;
+  font-size: var(--FS_MD) !important;
+  font-weight: var(--FW_XB) !important;
   color: #374151;
   margin: 10px 0 6px 0;
 }
@@ -213,9 +240,8 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] > div{
   box-shadow: none !important;
   display: flex !important;
   align-items: center !important;
+  border-radius: 10px !important;
 }
-
-/* hover/focus 링 제거 */
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus,
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:focus-within,
 div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover{
@@ -223,7 +249,6 @@ div[data-testid="stSelectbox"] div[data-baseweb="select"] > div:hover{
   outline: none !important;
   box-shadow: none !important;
 }
-
 div[data-testid="stSelectbox"] div[role="combobox"]{
   min-height: var(--SEL_H) !important;
   height: var(--SEL_H) !important;
@@ -233,41 +258,52 @@ div[data-testid="stSelectbox"] div[role="combobox"]{
   align-items: center !important;
   background: transparent !important;
 }
-
 div[data-testid="stSelectbox"] div[data-baseweb="select"]{
   font-size: var(--SEL_FONT) !important;
 }
 div[data-testid="stSelectbox"] div[data-baseweb="select"] *{
   font-size: var(--SEL_FONT) !important;
   line-height: 1.5 !important;
+  font-weight: var(--FW_M) !important;
 }
 
-/* 드롭다운 옵션 폰트 */
+/* 메뉴(팝업) 전체 */
+div[data-baseweb="popover"] *{
+  font-family: var(--FONT_FAMILY) !important;
+}
+
+/* 옵션 리스트(열린 상태) 폰트 크기/두께 */
 div[data-baseweb="menu"] *,
 [role="listbox"] *,
 li[role="option"]{
-  font-size: var(--MENU_FONT) !important;
+  font-size: var(--MENU_FONT) !important; 
+  line-height: 1.35 !important;
 }
-li[role="option"]:hover{
-  background: #f1f5f9 !important;
+
+/* 옵션 한 줄 높이(간격)도 바꾸고 싶으면 */
+li[role="option"]{
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+}
+
+/* 선택된 옵션(하이라이트) */
+li[role="option"][aria-selected="true"]{
+  font-weight: var(--FW_B) !important;
 }
 
 /* Party(파티 슬롯 1/2) 간격 줄이기 */
-:root{ --PARTY_GAP: -5px; }
+:root{ --PARTY_GAP: 6px; }
 
-.st-key-party_group div[data-testid="stElementContainer"]{
-  margin-bottom: var(--PARTY_GAP) !important;
-}
-.st-key-party_group div[data-testid="stElementContainer"]:last-child{
+/* 파티 그룹 안의 selectbox elementContainer는 밑간격을 0으로 */
+.st-key-party_group div[data-testid="stElementContainer"]:has(div[data-testid="stSelectbox"]){
   margin-bottom: 0 !important;
 }
 
-/* 버전에 따라 selectbox 자체에 margin이 잡히는 경우 대비 */
-.st-key-party_group div[data-testid="stSelectbox"]{
-  margin-bottom: var(--PARTY_GAP) !important;
-}
-.st-key-party_group div[data-testid="stSelectbox"]:last-of-type{
-  margin-bottom: 0 !important;
+/* "첫번째 selectbox" 바로 다음에 오는 "두번째 selectbox"만 위로 당김 */
+.st-key-party_group
+  div[data-testid="stElementContainer"]:has(div[data-testid="stSelectbox"])
+  + div[data-testid="stElementContainer"]:has(div[data-testid="stSelectbox"]){
+  margin-top: calc(var(--PARTY_GAP) * -1) !important;
 }
 
 /* =====================================================
@@ -276,19 +312,17 @@ li[role="option"]:hover{
 .stButton > button[kind="primary"]{
   border-radius: 12px;
   height: 40px;
-  font-weight: 800;
+  font-weight: var(--FW_XB);
   background: #ff4b4b !important;
   border: none !important;
   color: #ffffff !important;
   box-shadow: 0 8px 18px rgba(255,75,75,0.20);
 }
-.stButton > button[kind="primary"]:hover{
-  background: #ff3434 !important;
-}
+.stButton > button[kind="primary"]:hover{ background: #ff3434 !important; }
 .stButton > button:not([kind="primary"]){
   border-radius: 12px;
   height: 40px;
-  font-weight: 700;
+  font-weight: var(--FW_B);
   background: #ffffff !important;
   border: 1px solid #e5e7eb !important;
   color: #111827 !important;
@@ -307,16 +341,14 @@ div[data-testid="stMarkdownContainer"] hr.u-divider{
   margin-top: -4px !important;
   margin-bottom: 12px !important;
 }
-div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{
-  padding-top: var(--TAB_GAP) !important;
-}
+div[data-testid="stTabs"] div[data-baseweb="tab-panel"]{ padding-top: var(--TAB_GAP) !important; }
 div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
   margin-top: 0 !important;
   padding-top: 0 !important;
 }
 
 /* =====================================================
-   9) Tables / pills (너의 커스텀 UI)
+   9) Tables / pills
 ===================================================== */
 .stat-wrap{ margin: 0px 0 14px 0; }
 .stat-pill{
@@ -327,8 +359,8 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
   border: 1px solid #f1f5f9;
   border-radius: 12px;
   padding: 10px 12px;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: var(--FS_SM);
+  font-weight: 800 !important;
   line-height: 1.2;
   color: #111827;
   box-shadow: 0 4px 10px rgba(0,0,0,0.06);
@@ -336,6 +368,7 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
 }
 
 :root{ --ROW_H: 32px; --CELL_PX: 12px; }
+
 .u-table{
   width: 100%;
   border-collapse: separate;
@@ -347,6 +380,8 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
   overflow: hidden;
   box-shadow: 0 6px 16px rgba(0,0,0,0.03);
 }
+
+/* 공통 */
 .u-table thead th,
 .u-table tbody td{
   height: var(--ROW_H);
@@ -356,28 +391,37 @@ div[data-testid="stTabs"] div[data-baseweb="tab-panel"] > div{
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-size: 12px;
+  font-size: var(--FS_SM);
   color: #111827;
 }
+
+/* 헤더만 굵게 */
 .u-table thead th{
   background: #f9fafb;
   color: #374151;
-  font-weight: 800;
+  font-weight: 800 !important; /* 또는 var(--FW_XB) */
   border-bottom: 1px solid #e5e7eb;
 }
-.u-table tbody td{ border-bottom: 1px solid #eef2f7; }
-.u-table tbody tr:last-child td{ border-bottom: none; }
-.u-table.small thead th,
-.u-table.small tbody td{ font-size: 12px; }
-.u-empty{ font-size: 12px; color: #6b7280; padding: 10px 2px 0 2px; }
 
-/* 테이블 헤더 밑줄(강조) */
-thead tr th{
-  border-bottom: 2px solid rgba(255,52,52,0.18) !important;
+/* 본문은 얇게 */
+.u-table tbody td{
+  font-weight: 400 !important;
+  border-bottom: 1px solid #eef2f7;
 }
 
+.u-table tbody td:first-child{
+  font-weight: var(--FW_B) !important;   /* 700 */
+  color: #374151;
+}
+
+.u-table tbody tr:last-child td{ border-bottom: none; }
+.u-empty{ font-size: var(--FS_SM); color: #6b7280; padding: 10px 2px 0 2px; }
+
+/* 테이블 헤더 밑줄(강조) */
+thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
+
 /* =====================================================
-   10) Progress bar
+   10) Progress bar (+ shimmer)
 ===================================================== */
 .prog-wrap{
   width: 100%;
@@ -389,12 +433,38 @@ thead tr th{
   position: relative;
   box-shadow: 0 4px 10px rgba(0,0,0,0.06);
 }
+
 .prog-bar{
   height: 100%;
   width: 0%;
   background: #4b5563;
   transition: width 120ms ease;
+  position: relative;
+  overflow: hidden;
 }
+
+/* Shimmer overlay */
+.prog-bar::after{
+  content:"";
+  position:absolute;
+  inset:0;
+  background: linear-gradient(
+    120deg,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,0.35) 45%,
+    rgba(255,255,255,0) 90%
+  );
+  transform: translateX(-60%);
+  animation: prog_shimmer 1.15s ease-in-out infinite;
+  opacity: 0.75;
+  pointer-events: none;
+}
+
+@keyframes prog_shimmer{
+  0%   { transform: translateX(-60%); }
+  100% { transform: translateX(160%); }
+}
+
 .prog-text{
   position: absolute;
   inset: 0;
@@ -408,13 +478,14 @@ thead tr th{
   text-shadow: 0 1px 2px rgba(0,0,0,0.25);
   user-select: none;
 }
+
 .prog-area{
-  padding-top: -5px;
-  padding-bottom: 20px;
+  padding: 0 !important;
+  margin: 0px 0 8px 0 !important;
 }
 
 /* =====================================================
-   11) Responsive grids (summary/stat)
+   11) Responsive grids
 ===================================================== */
 .summary-grid{
   display: grid;
@@ -445,6 +516,42 @@ thead tr th{
 
   .stat-grid{ grid-template-columns: 1fr; }
   .stat-grid .span-2{ grid-column: auto; }
+}
+
+/* =====================================================
+   Bottom global note (outer 밖, title-card 스타일)
+===================================================== */
+.global-note{
+  background: var(--SHELL_BG) !important;
+  border-radius: var(--CARD_RADIUS) !important;
+  box-shadow: var(--CARD_SHADOW) !important;
+  padding: 14px 18px !important;
+  margin: 0px 0 0 0 !important;
+}
+.global-note .note-title{
+  font-size: var(--FS_MD);
+  font-weight: var(--FW_XB);
+  color: #111827;
+  margin: 0 0 6px 0;
+}
+.global-note .note-text{
+  font-size: var(--FS_SM);
+  font-weight: 400;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0;
+}
+.global-note .note-text b{
+  font-weight: var(--FW_B);
+  color: #374151;
+}
+.global-note .note-text code{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono","Courier New", monospace;
+  font-size: calc(var(--FS_SM) - 1px);
+  background: #f9fafb;
+  border: 1px solid #eef2f7;
+  padding: 1px 6px;
+  border-radius: 8px;
 }
 </style>
 """,
@@ -744,7 +851,7 @@ def build_stat_tables(stats: dict, show_sum: bool = False):
         add_if_nonzero(g2, "치명타 피해", _fmt_pct(crit_dmg_eff), crit_dmg_eff)
         crit_df = pd.DataFrame(g2, columns=["항목", "값"])
 
-        # 공통(피해 보정) - 증폭은 여기서 빼서 amp_df로 따로 만든다
+        # 공통(피해 보정)
         g3 = []
         add_if_nonzero(g3, "속성 피해", _fmt_pct(all_elem_total), all_elem_total)
         add_if_nonzero(g3, "방어력 관통", _fmt_pct(armor_pen_eff), armor_pen_eff)
@@ -1031,9 +1138,8 @@ def party2_key(kind: str) -> str:
 # =====================================================
 st.markdown("""
 <div class="title-card">
-  <div class="h-title">쿠키 최적화 시뮬레이터</div>
+  <div class="h-title">THE ABYSS COOKIE LAB</div>
   <div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>
-  <div class="h-meta">기타 문의는 Epsilon24@gmail.com으로 주세요</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -1049,7 +1155,7 @@ with st.container(key="outer_shell", border=False):
     # =====================================================
     with left_col:
         with st.container(key="panel_select", border=True):
-            st.markdown('<div class="h-title">선택</div>', unsafe_allow_html=True)
+            st.markdown('<div class="h-title">SELECT</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="ctl-label">쿠키</div>', unsafe_allow_html=True)
             cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "이슬맛 쿠키"]
@@ -1280,7 +1386,7 @@ with st.container(key="outer_shell", border=False):
     # =====================================================
     with right_col:
         with st.container(key="panel_result", border=True):
-            st.markdown('<div class="h-title">결과</div>', unsafe_allow_html=True)
+            st.markdown('<div class="h-title">RESULT</div>', unsafe_allow_html=True)
 
             best = st.session_state.best
             kind = st.session_state.best_kind
@@ -1314,18 +1420,15 @@ with st.container(key="outer_shell", border=False):
 
                         rows = []
                         if kind in ("wind", "melan"):
-                            add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
-                            # 선택(수동)일 때 사용자가 고른 장비도 같이 표시(참고)
-                            if st.session_state.mode == "선택(수동)":
-                                add(rows, "선택 장비", st.session_state.equip or "")
+                            add(rows, "장비 선택 모드", st.session_state.mode) 
                             add(rows, "쿠키", best.get("cookie", ""))
-                            add(rows, "장비(결과)", best.get("equip", ""))
+                            add(rows, "장비", best.get("equip", ""))
                             add(rows, "시즈나이트", best.get("seaz", ""))
                             add(rows, "유니크 조각", best.get("unique", ""))
                             add(rows, "아티팩트", best.get("artifact", ""))
                             add(rows, "파티", party_txt)
                         else:
-                            add(rows, "장비 선택 모드", st.session_state.mode)  #  추가
+                            add(rows, "장비 선택 모드", st.session_state.mode) 
                             add(rows, "쿠키", "이슬맛 쿠키")
                             add(rows, "장비", best.get("equip_fixed", ""))
                             add(rows, "시즈나이트", best.get("seaz_fixed", getattr(sim, "FIXED_SEAZ_ISLE", "")))
@@ -1360,7 +1463,7 @@ with st.container(key="outer_shell", border=False):
                         if not stats:
                             st.caption("스탯 정보가 없습니다.")
                         else:
-                            # ✅ 토글 값은 세션에서 읽어서 안전하게 전달
+                            # 토글 값은 세션에서 읽어서 전달
                             show_sum_val = st.session_state.get(f"show_sum__{kind}", False)
 
                             atk_df, crit_df, common_df, skill_df, strike_df, amp_df = build_stat_tables(
@@ -1383,4 +1486,21 @@ with st.container(key="outer_shell", border=False):
 
             if st.session_state.last_run:
                 st.caption(f"실행: {st.session_state.last_run}")
-st.markdown('</div>', unsafe_allow_html=True)
+
+# =====================================================
+# Global note (outer_shell 밖)
+# =====================================================
+st.markdown(
+"""
+<div class="global-note">
+  <div class="note-title">Notes</div>
+  <p class="note-text">
+    • 화면에 보이는 대부분의 수치는 <b>가산(+)</b>으로 누적된 합입니다.<br/>
+    • 하지만 실제 계산에서는 일부 항목이 <b>배율(×)</b>로 적용됩니다.<br/>
+    • 따라서 UI의 퍼센트 <b>합</b>과, 최종 공식에 들어가는 <b>최종 배율(×)</b>은 서로 다를 수 있습니다.<br/>
+    • 기타 문의 : <b>Epsilon24@gmail.com</b><br/>
+  </p>
+</div>
+""",
+unsafe_allow_html=True,
+)
