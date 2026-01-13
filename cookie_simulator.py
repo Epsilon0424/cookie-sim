@@ -87,7 +87,6 @@ BOSS_MARK_ELEMENT_RESIST_DEFAULT = 0.40
 # =====================================================
 # 1) 공통 유틸
 # =====================================================
-
 def clamp(x: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, x))
 
@@ -128,6 +127,54 @@ def add(stats: Dict[str, float], bonus: Dict[str, float]):
     for k, v in bonus.items():
         add_stat(stats, k, float(v))
 
+# =====================================================
+# Focus breakdown (치피/공퍼/공증% 출처 기록)
+# =====================================================
+
+FOCUS_BD_KEYS = ["buff_crit_dmg_raw", "buff_atk_pct_raw", "atk_pct"]
+FOCUS_BD_LABEL = {
+    "buff_crit_dmg_raw": "치피(버프)",
+    "buff_atk_pct_raw": "공퍼(버프)",
+    "atk_pct": "공퍼/공증%(장비스탯)",
+}
+
+def _bd_init(stats: Dict[str, float]) -> Dict[str, List[Dict[str, object]]]:
+    """
+    stats["_focus_bd"] = {
+      key: [ {source, value, note}, ... ]
+    }
+    """
+    bd = stats.get("_focus_bd")
+    if not isinstance(bd, dict):
+        bd = {k: [] for k in FOCUS_BD_KEYS}
+        stats["_focus_bd"] = bd
+    else:
+        for k in FOCUS_BD_KEYS:
+            bd.setdefault(k, [])
+    return bd  # type: ignore
+
+def bd_add(stats: Dict[str, float], key: str, value: float, source: str, note: str = ""):
+    if key not in FOCUS_BD_KEYS:
+        return
+    if abs(float(value)) < 1e-15:
+        return
+    bd = _bd_init(stats)
+    bd[key].append({
+        "항목": FOCUS_BD_LABEL.get(key, key),
+        "source": source,
+        "value": float(value),
+        "note": note,
+    })
+
+def bd_add_delta(stats: Dict[str, float], key: str, before: float, source: str, note: str = ""):
+    after = float(stats.get(key, 0.0))
+    bd_add(stats, key, after - float(before), source=source, note=note)
+
+def get_focus_breakdown(stats: Dict[str, float]) -> Dict[str, List[Dict[str, object]]]:
+    # UI에서 바로 쓰기 좋게
+    bd = stats.get("_focus_bd")
+    return bd if isinstance(bd, dict) else {}
+
 def _resolve_equip_list_override(
     equip_override: Optional[Union[str, Sequence[str]]],
     default_equips: List[str]
@@ -151,6 +198,7 @@ def _resolve_equip_list_override(
     allowed_set = set(default_equips)
     filtered = [x for x in requested if x in allowed_set]
     return filtered
+
 # =====================================================
 # 2) 공통 데이터(쿠키/속성/직업/형태)
 # =====================================================
@@ -360,6 +408,19 @@ ARTIFACTS = {
             "duration": 18.0,
         }
     },
+
+    "비에 젖은 과거" : {
+        "base_stats": {"buff_amp": 0.16},
+        "unique_stats": {},
+        "unique_buffs": {
+            "crit_dmg": 0.60,
+        },
+        # 소나기 발생 시 심연(모속피 +30%, 10초) -> 이슬 사이클에서 uptime 모델링
+        "abyss": {
+            "all_elem_dmg": 0.30,
+            "duration": 10.0,
+        }
+    }
 }
 
 def apply_artifact(stats: Dict[str, float], artifact_name: str):
@@ -368,6 +429,14 @@ def apply_artifact(stats: Dict[str, float], artifact_name: str):
     # 1) 기본옵션(장비스탯) / 고유스탯(증폭 X)
     add(stats, a.get("base_stats", {}))
     add(stats, a.get("unique_stats", {}))
+
+    # --- breakdown: 아티 기본옵/고유스탯 중 atk_pct(장비스탯 축) ---
+    bs = a.get("base_stats", {}) or {}
+    us = a.get("unique_stats", {}) or {}
+    if "atk_pct" in bs:
+        bd_add(stats, "atk_pct", float(bs["atk_pct"]), source=f"아티:{artifact_name}", note="기본옵 atk%")
+    if "atk_pct" in us:
+        bd_add(stats, "atk_pct", float(us["atk_pct"]), source=f"아티:{artifact_name}", note="고유스탯 atk%")
 
     # 2) 고유 버프(증폭 O)
     BA = float(stats.get("buff_amp", 0.0))
@@ -379,16 +448,21 @@ def apply_artifact(stats: Dict[str, float], artifact_name: str):
     if "atk_pct" in ub:
         x = float(ub["atk_pct"])
         stats["buff_atk_pct_raw"] += x * buff_scale
+        bd_add(stats, "buff_atk_pct_raw", x * buff_scale, source=f"아티:{artifact_name}", note="고유버프 공퍼")
 
     # 치확/치피/속피 버프: 가산
     if "crit_rate" in ub:
         stats["buff_crit_rate_raw"] += float(ub["crit_rate"]) * buff_scale
+
     if "crit_dmg" in ub:
-        stats["buff_crit_dmg_raw"] += float(ub["crit_dmg"]) * buff_scale
+        add_cd = float(ub["crit_dmg"]) * buff_scale
+        stats["buff_crit_dmg_raw"] += add_cd
+        bd_add(stats, "buff_crit_dmg_raw", add_cd, source=f"아티:{artifact_name}", note="고유버프 치피")
+
     if "all_elem_dmg" in ub:
         stats["buff_all_elem_dmg_raw"] += float(ub["all_elem_dmg"]) * buff_scale
-
-    # (필요시) 최종공/피해증가 같은 버프도 여기서 확장 가능
+            
+    # 최종공/피해증가
     if "final_atk_mult" in ub:
         stats["final_atk_mult"] += float(ub["final_atk_mult"]) * buff_scale
     if "dmg_bonus" in ub:
@@ -470,6 +544,7 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
     if ut == "asparagus_forest":
         atk_bonus = float(u.get("atk_per_stack", 0.0)) * int(u.get("max_stacks", 0))
         stats["atk_pct"] += atk_bonus
+        bd_add(stats, "atk_pct", atk_bonus, source=f"유니크:{unique_name}", note="공퍼(스택합)")
 
         ult_cd = float(ULT_COOLDOWN.get(cookie_name_kr, 30.0))
         if ult_cd > 0:
@@ -509,49 +584,101 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
 # =====================================================
 # 8) 공통: 파티 버프/디버프
 # =====================================================
+from typing import List
+
 def apply_party_buffs(stats: dict, party: List[str], main_cookie_name: str):
-    # 버프 증폭은 "버프"에만 적용 (공퍼/치피/속피 버프)
-    # (아티/장비/설유 같은 "스탯"에는 미적용)
+    # =========================
+    # 0) 안전: 기본 키 세팅
+    # =========================
+    stats.setdefault("buff_amp", 0.0)
+    stats.setdefault("debuff_amp", 0.0)
+
+    stats.setdefault("buff_crit_dmg_raw", 0.0)
+    stats.setdefault("buff_atk_pct_raw", 0.0)
+    stats.setdefault("buff_all_elem_dmg_raw", 0.0)
+
+    stats.setdefault("final_atk_mult", 0.0)
+    stats.setdefault("element_strike_dmg", 0.0)
+
+    # (선택) 윈파 쪽에 방관/최공/치피 등을 쓰면 여기 raw 키도 필요
+    stats.setdefault("buff_armor_pen_raw", 0.0)
+
+    # =========================
+    # 1) 중복 적용 방지 (뻥튀기 핵심 방지)
+    # =========================
+    applied = stats.setdefault("_applied_party_buffs", set())
+
+    def _apply_once(tag: str, fn):
+        if tag in applied:
+            return
+        fn()
+        applied.add(tag)
+
+    has_isle = ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키")
+    has_wind = ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키")
+
+    # =========================
+    # 2) 증폭(amp) 소스 확정 반영
+    # =========================
+    def _apply_amp_sources():
+        # [이슬] 버프 증폭 (너 기존 로직 유지)
+        if has_isle:
+            stats["buff_amp"] += 0.40  # 잠재력
+            stats["buff_amp"] += 0.24  # 전용무기
+            stats["buff_amp"] += 0.20  # 시즈나이트(가정)
+
+        # [윈파] 디버프 증폭 + 세트 속성강타피해 (사용자 확정값)
+        if has_wind:
+            stats["debuff_amp"] += 0.40  # 장비 잠재력 총 40%
+            stats["debuff_amp"] += 0.15  # 세트효과 15%
+            stats["element_strike_dmg"] += 0.25  # 세트효과: 속성강타피해 +25%
+
+    _apply_once("AMP_SOURCES", _apply_amp_sources)
+
+    # =========================
+    # 3) 확정된 amp로 scale 계산
+    # =========================
     BA = float(stats.get("buff_amp", 0.0))
-    buff_scale = 1.0 + BA
+    DA = float(stats.get("debuff_amp", 0.0))
+    buff_scale   = 1.0 + BA
+    debuff_scale = 1.0 + DA  # (디버프 계열 수치에 곱할 때 사용)
 
-    # [1] 이슬 파티 (또는 메인)
-    if ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키"):
+    # =========================
+    # 4) 파티 버프 적용 (raw에 누적)
+    # =========================
+    def _apply_isle_buffs():
         u_cd = get_uptime("PARTY_ISLE_CRITDMG_0p56")
-        # 치피 +56%는 버프라고 보고 raw로 적립
-        stats["buff_crit_dmg_raw"] += 0.56 * u_cd * buff_scale
-        stats["buff_amp"]         += 0.40 # 잠재력
-        stats["buff_amp"]         += 0.24 # 전용무기
+        add_cd = 0.56 * u_cd * buff_scale
+        stats["buff_crit_dmg_raw"] += add_cd
+        bd_add(stats, "buff_crit_dmg_raw", add_cd, source="파티:이슬", note="치피 56%")
 
-        # 이슬 공퍼 22.4% (버프) → 합으로 적립
         u_atk = get_uptime("PARTY_ISLE_ATK_0p224")
-        stats["buff_atk_pct_raw"] += 0.224 * u_atk * buff_scale
+        add_atk = 0.224 * u_atk * buff_scale
+        stats["buff_atk_pct_raw"] += add_atk
+        bd_add(stats, "buff_atk_pct_raw", add_atk, source="파티:이슬", note="공퍼 22.4%")
 
         u_seaz = get_uptime("PARTY_ISLE_SEAZ_ATK25_ALL30")
-        # "버프증폭이 속피/치피에도 영향"이라고 했으니 최종공도 동일 처리
         stats["final_atk_mult"] += 0.25 * u_seaz * buff_scale
-        stats["buff_amp"]         += 0.20 # 시즈나이트
-
-        # 모속피 +30%는 버프(= buff_all_elem_dmg_raw)로
         stats["buff_all_elem_dmg_raw"] += 0.30 * u_seaz * buff_scale
 
-    # [2] 윈파 파티 (또는 메인)
-    if ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키"):
+    def _apply_wind_party_effects():
         u = get_uptime("PARTY_WIND_ARMOR224_FINAL3125_CRIT40")
-        # 치피 +40%도 버프라고 보면 raw로
-        stats["buff_crit_dmg_raw"] += 0.40 * u * buff_scale
-        stats["debuff_amp"]         += 0.40 # 잠재력
-        stats["debuff_amp"]         += 0.25 # 아티팩트
+        add_cd = 0.40 * u * buff_scale
+        stats["buff_crit_dmg_raw"] += add_cd
+        bd_add(stats, "buff_crit_dmg_raw", add_cd, source="파티:윈파", note="치피 40%")
 
-        if GOLDEN_SET_TEAM_AURA:
-            # 황금 예복: 디버프증폭/속강은 스탯(오라/효과)로 처리(증폭 미적용)
-            stats["debuff_amp"]         += 0.15
-            stats["element_strike_dmg"] += 0.25
+    if has_isle:
+        _apply_once("PARTY_ISLE", _apply_isle_buffs)
+
+    if has_wind:
+        _apply_once("PARTY_WIND", _apply_wind_party_effects)
+
+    return stats
+
 
 # =====================================================
 # 9) 공통: 딜 공식
 # =====================================================
-
 def base_damage_only(stats: Dict[str, float]) -> float:
     # 치확 = (장비스탯 치확) + (버프 치확)
     promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
@@ -645,6 +772,95 @@ def base_damage_only(stats: Dict[str, float]) -> float:
         * recommended_mult
         * taken_mult
     )
+
+def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, float]]:
+    """
+    UI 표시용 '유효 스탯' 요약.
+    - *_sum   : '표시용 합(가산 환산)'
+    - *_equiv : '실제 곱 환산(=딜식에 들어가는 총 배율-1)'
+    """
+    s = stats or {}
+
+    promo_cr_mult    = float(s.get("promo_crit_rate_mult", 1.0))
+    promo_ap_mult    = float(s.get("promo_armor_pen_mult", 1.0))
+    promo_atk_mult   = float(s.get("promo_atk_pct_mult", 1.0))
+    promo_final_mult = float(s.get("promo_final_dmg_mult", 1.0))
+
+    # ---- 공격력% 축 ----
+    equip_atk_add  = float(s.get("base_atk_pct", 0.0)) + float(s.get("atk_pct", 0.0))
+    equip_atk_mult = (1.0 + equip_atk_add) * promo_atk_mult
+
+    buff_atk_pct_raw     = float(s.get("buff_atk_pct_raw", 0.0))
+    buff_atk_mult_sum    = 1.0 + buff_atk_pct_raw
+    buff_atk_mult_legacy = float(s.get("buff_atk_mult", 1.0))
+    buff_atk_mult        = buff_atk_mult_sum * buff_atk_mult_legacy
+
+    # 표시용 합(가산 환산)
+    atk_pct_sum   = (equip_atk_mult - 1.0) + (buff_atk_mult - 1.0)
+    # 실제 곱 환산
+    atk_pct_equiv = (equip_atk_mult * buff_atk_mult) - 1.0
+
+    # ---- 최종공(가산) ----
+    final_atk_mult_add = float(s.get("final_atk_mult", 0.0))
+
+    # ---- 치명 ----
+    eff_cr = clamp((float(s.get("crit_rate", 0.0)) * promo_cr_mult) + float(s.get("buff_crit_rate_raw", 0.0)), 0.0, 1.0)
+    eff_cd = max(1.0, float(s.get("crit_dmg", 1.0)) + float(s.get("buff_crit_dmg_raw", 0.0)))
+
+    # ---- 속피(장비스탯+버프) ----
+    eff_all_elem = float(s.get("all_elem_dmg", 0.0)) + float(s.get("buff_all_elem_dmg_raw", 0.0))
+
+    # ---- 방관 ----
+    eff_armor_pen = clamp(float(s.get("armor_pen", 0.0)) * promo_ap_mult, 0.0, 0.8)
+
+    # ---- 디버프 증폭(방깎/내성깎/표식저항감소에만) ----
+    DA = float(s.get("debuff_amp", 0.0))
+    debuff_scale = 1.0 + DA
+
+    eff_def_red      = clamp(float(s.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
+    eff_elem_res_red = float(s.get("elem_res_reduction_raw", 0.0)) * debuff_scale
+    eff_mark_res_red = float(s.get("mark_res_reduction_raw", 0.0)) * debuff_scale
+
+    # ---- 피해량 ----
+    eff_dmg_bonus = float(s.get("dmg_bonus", 0.0)) + float(s.get("buff_dmg_bonus_raw", 0.0))
+
+    # ---- 최종피해 ----
+    final_dmg_add   = float(s.get("final_dmg", 0.0)) + float(s.get("buff_final_dmg_raw", 0.0))
+    final_dmg_sum   = final_dmg_add + (promo_final_mult - 1.0)
+    final_dmg_equiv = (1.0 + final_dmg_add) * promo_final_mult - 1.0
+
+    return {
+        "numeric": {
+            "equip_atk_mult": equip_atk_mult,
+            "buff_atk_mult": buff_atk_mult,
+
+            "atk_pct_sum": atk_pct_sum,
+            "atk_pct_equiv": atk_pct_equiv,
+
+            "final_atk_mult_add": final_atk_mult_add,
+
+            "eff_crit_rate": eff_cr,
+            "eff_crit_dmg": eff_cd,
+
+            "eff_all_elem_dmg": eff_all_elem,
+            "eff_armor_pen": eff_armor_pen,
+
+            "eff_def_reduction": eff_def_red,
+            "eff_elem_res_reduction": eff_elem_res_red,
+            "eff_mark_res_reduction": eff_mark_res_red,
+
+            "dmg_bonus": eff_dmg_bonus,
+
+            "final_dmg_add": final_dmg_add,
+            "promo_final_dmg_mult": promo_final_mult,
+            "final_dmg_sum": final_dmg_sum,
+            "final_dmg_equiv": final_dmg_equiv,
+
+            "buff_amp": float(s.get("buff_amp", 0.0)),
+            "debuff_amp": DA,
+            "element_strike_dmg": float(s.get("element_strike_dmg", 0.0)),
+        }
+    }
 
 def skill_bonus_mult(stats: Dict[str, float], skill_type: str) -> float:
     if skill_type == "basic":
@@ -771,8 +987,8 @@ def build_stats_for_combo(
 
         "element_strike_dmg": 0.0,
 
-        "buff_amp": 0.0,      # 버프 증폭(공퍼/치피/속피 버프에 적용)
-        "debuff_amp": 0.0,    # 디버프 증폭(방깎/내성깎에 적용)
+        "buff_amp": float(base.get("buff_amp", 0.0)),
+        "debuff_amp": float(base.get("debuff_amp", 0.0)),
 
         # 보스 속성 내성(기본값: 0.0) — 필요하면 외부에서 세팅
         "boss_elem_resist": 0.0,
@@ -796,7 +1012,7 @@ def build_stats_for_combo(
     }
 
     # =====================================================
-    # [멜랑크림] 승급 효과: 전부 곱연산 축으로 기록
+    # 승급 효과 : 전부 곱연산 축으로 기록
     # =====================================================
     if cookie_name_kr == "멜랑크림 쿠키" and MELAN_PROMO_ENABLED:
         stats["promo_crit_rate_mult"] *= MELAN_PROMO_CRIT_RATE_MULT
@@ -808,7 +1024,10 @@ def build_stats_for_combo(
 
     if cookie_name_kr == "윈드파라거스 쿠키" and WIND_PROMO_ENABLED:
         stats["crit_rate"] += WIND_PROMO_CRIT_RATE_ADD
+
+        before_ap = float(stats.get("atk_pct", 0.0))
         stats["atk_pct"]   += WIND_PROMO_ATK_PCT_ADD
+        bd_add_delta(stats, "atk_pct", before_ap, source="승급:윈파", note="공퍼 +10%")
 
         # def/hp는 딜에 직접 안 쓰더라도 스탯으로 기록
         stats["def_pct"] = float(stats.get("def_pct", 0.0)) + WIND_PROMO_DEF_PCT_ADD
@@ -817,11 +1036,16 @@ def build_stats_for_combo(
         stats["final_dmg"] += WIND_PROMO_FINAL_DMG_ADD
         stats["_wind_promo"] = 1.0
 
+    # --- 장비에서 들어오는 atk_pct(공퍼/공증%)만 출처 기록 ---
+    before_ap = float(stats.get("atk_pct", 0.0))
+
     equip = EQUIP_SETS[equip_name]
     for part in ["head", "top", "bottom"]:
         add(stats, equip[part]["base"])
         add(stats, equip[part]["unique"])
     add(stats, equip["set_effect"]["base"])
+
+    bd_add_delta(stats, "atk_pct", before_ap, source=f"장비:{equip_name}")
 
     if equip_name == "달콤한 설탕 깃털복":
         stats["sugar_set_enabled"] = 1.0
@@ -848,11 +1072,28 @@ def build_stats_for_combo(
             if "final_dmg_stack" in passive and "max_stacks" in passive:
                 stats["final_dmg"] += passive["final_dmg_stack"] * passive["max_stacks"]
 
+    # --- 설유(atk_pct) 출처 기록용 before ---
+    before_ap_shard = float(stats.get("atk_pct", 0.0))
+
     for k, slots in shards.items():
         if k in SHARD_INC:
             add_stat(stats, k, slots * SHARD_INC[k])
 
-    stats["atk_pct"]   += potentials.get("atk_pct", 0) * POTENTIAL_INC["atk_pct"]
+    # --- 설유 atk%만 breakdown 기록(중복가산 방지: delta로 기록) ---
+    ap_slots = int(shards.get("atk_pct", 0) or 0)
+    if ap_slots > 0:
+        bd_add_delta(
+            stats,
+            "atk_pct",
+            before_ap_shard,
+            source="설탕유리조각",
+            note=f"atk_pct 슬롯 {ap_slots}칸"
+        )
+
+    pot_ap = potentials.get("atk_pct", 0) * POTENTIAL_INC["atk_pct"]
+    if pot_ap:
+        bd_add(stats, "atk_pct", pot_ap, source="잠재력", note=f"atk_pct {potentials.get('atk_pct',0)}개")
+    stats["atk_pct"] += pot_ap
     stats["crit_rate"] += potentials.get("crit_rate", 0) * POTENTIAL_INC["crit_rate"]
     stats["crit_dmg"]  += potentials.get("crit_dmg", 0) * POTENTIAL_INC["crit_dmg"]
     stats["armor_pen"] += potentials.get("armor_pen", 0) * POTENTIAL_INC["armor_pen"]
@@ -1321,37 +1562,34 @@ def melan_damage_for_token(
 
     if token == "B4":
         coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
-
-        #  프리마돈나 상태 기본공격은 패시브 피해 취급
         mult_type = "passive" if is_prima else "basic"
 
         dmg = 0.0
         for c in coeffs:
-            dmg += unit * c * skill_bonus_mult(stats, mult_type)
+            hdmg = unit * c * skill_bonus_mult(stats, mult_type)
 
+            # 프리마 기본공은 프리마 강화 배율 적용(원하면 유지)
             if is_prima:
-                hdmg *= prima_mult 
-            total_direct += hdmg
-
-            if is_prima:
-                b["passive"] = hdmg
+                hdmg *= prima_mult
+                b["passive"] += hdmg
             else:
-                b["basic"] = hdmg
+                b["basic"] += hdmg
+
+            dmg += hdmg
 
         return dmg, MELAN_TIME["B4"], is_prima, b
 
     if token == "S":
         if is_prima:
-            #  프리마돈나 상태 S는 패시브 피해 취급
             coeff = MELAN_SPECIAL_PRIMA_AS_PASSIVE_COEFF
             dmg = unit * coeff * skill_bonus_mult(stats, "passive")
-            b["passive"] = dmg
+            dmg *= prima_mult
+            b["passive"] += dmg
             return dmg, MELAN_TIME["S"], is_prima, b
         else:
             coeff = MELAN_SPECIAL_NORMAL_COEFF
             dmg = unit * coeff * skill_bonus_mult(stats, "special")
-            dmg *= prima_mult
-            # 비(프리마) 상태에 prima_mult 곱하면 안 됨
+            # 비(프리마) S에는 prima_mult 곱하지 않음
             b["special"] += dmg
             return dmg, MELAN_TIME["S"], is_prima, b
 
@@ -1606,57 +1844,497 @@ def optimize_melan_cycle(
     return best
 
 # =====================================================
-# (C) 이슬(보호막)
+# (C) 이슬맛 쿠키 (DPS 사이클 / 보호막 최적화)
 # =====================================================
 
-ISLE_BASE_ATK = 577
-ISLE_ELEM_SUM = 160
-ISLE_ATKPCT_SUM = 1.22
-ISLE_SHIELD_BASE_MULT = 1.008
+from typing import Dict, List, Tuple, Optional, Callable, Union
 
-FIXED_SEAZ_ISLE = "허브그린드:백마법사의 의지"
+ISLE_PROMO_ENABLED = True
 
+# -----------------------------
+# 고정 세팅
+# -----------------------------
 ISLE_FIXED_POT = {
     "elem_atk": 2,
-    "atk_pct": 2,
     "buff_amp": 4,
+    "atk_pct": 2,
     "crit_rate": 0,
     "crit_dmg": 0,
     "armor_pen": 0,
     "debuff_amp": 0,
 }
+ISLE_FIXED_UNIQUE   = "정화된 에메랄딘의 기억"
+ISLE_FIXED_ARTIFACT = "비에 젖은 과거"
 
-def calc_isle_shield(elem_slots: int, atk_pct_slots: int, shield_slots: int) -> Tuple[float, float]:
-    u = get_uptime("PARTY_ISLE_SEAZ_ATK25_ALL30")
-    seaz_atk_pct = 0.25 * u
+BASE_STATS_ISLE = {
+    "이슬맛 쿠키": {
+        "atk": 577.0,
+        "elem_atk": 0.0,
+        "atk_pct": 0.0,
+        "crit_rate": 0.15,
+        "crit_dmg": 1.50,
+        "armor_pen": 0.0,
+        "final_dmg": 0.0,
+        "buff_amp": 0.15,   # 기본 버프증폭 15%
+    }
+}
 
-    total_elem = ISLE_ELEM_SUM + SHARD_INC["elem_atk"] * elem_slots
-    total_atk_pct = ISLE_ATKPCT_SUM + SHARD_INC["atk_pct"] * atk_pct_slots + seaz_atk_pct
+# ---- 로테이션
+ISLE_CAST_TIME = {"B": 2.50, "S": 0.25, "C": 0.25, "U": 1.50}
 
-    final_atk = (ISLE_BASE_ATK + total_elem) * (1 + total_atk_pct)
-    total_shield_pct = SHARD_INC["shield_pct"] * shield_slots
-    final_shield = final_atk * (1 + total_shield_pct) * ISLE_SHIELD_BASE_MULT
-    return final_atk, final_shield
+# ---- 계수(%) -> 배율
+ISLE_BASIC_COEFF = 1.42 + 1.42 + 3.834              # = 6.674
+ISLE_SPECIAL_COEFF = (3.834 * 3) + 5.964            # = 17.466
 
-def optimize_isle_shards_only(party: List[str]) -> dict:
+ISLE_ULT_HITS_PER_SEC = 1.0
+ISLE_ULT_DURATION = 15.0
+ISLE_ULT_HIT_COEFF = 3.124
+
+ISLE_CHARGE_HITS = 1
+ISLE_CHARGE_HIT_COEFF = 1.491
+
+ISLE_SHADOW_HITS = 1
+ISLE_SHADOW_HIT_COEFF = 4.26
+
+# ---- 버프/패시브 파라미터
+ISLE_STACK_MAX = 6
+ISLE_STACK_FROM_S = 1
+ISLE_STACK_FROM_U = 2
+
+ISLE_STRIKE_STACK_CD_BASE = 8.0
+ISLE_STRIKE_STACK_CD_PROMO_REDUCE = 4.0  # => 4초
+
+ISLE_SHADOW_CD_BASE = 12.0
+ISLE_SHADOW_CD_PROMO_REDUCE = 3.0        # => 9초
+
+ISLE_END_BUFF_ATK_PCT = 0.224
+ISLE_END_BUFF_DUR_BASE = 8.0
+ISLE_END_BUFF_DUR_PROMO_ADD = 2.0
+
+ISLE_CLEAR_DEAL_CRITDMG = 0.56
+ISLE_CLEAR_DEAL_DUR = 30.0
+
+ISLE_PROMO_BASIC_DMG_CLEAR = 0.05
+ISLE_PROMO_BASIC_DMG_END   = 0.05
+
+ISLE_PROMO_ATK_MULT = 1.08
+ISLE_PROMO_FINAL_DMG_ADD = 0.04
+
+ISLE_PROMO_CHARGE_SHADOW_MULT = 1.20
+
+# 보호막 기본 배율(공격력의 100.8%)
+ISLE_SHIELD_BASE_MULT = 1.008
+
+
+def isle_generate_shard_candidates(target: str = "dps", step: int = 7) -> List[Dict[str, int]]:
+    """
+    - dps: 기존 step 기반 6축 탐색
+    - shield: 보호막 최적은 3축(elem_atk, atk_pct, shield_pct) "1칸 단위" 전수조사 (정확도 우선)
+    """
+    candidates: List[Dict[str, int]] = []
+
+    if target == "shield":
+        # 보호막 최적화: elem_atk + atk_pct + shield_pct = NORMAL_SLOTS (1칸 단위)
+        for ea in range(NORMAL_SLOTS + 1):
+            for ap in range(NORMAL_SLOTS - ea + 1):
+                sp = NORMAL_SLOTS - ea - ap
+                candidates.append({
+                    "elem_atk": ea,
+                    "atk_pct": ap,
+                    "shield_pct": sp,
+
+                    # 스키마 맞추기(다 0)
+                    "crit_rate": 0,
+                    "crit_dmg": 0,
+                    "all_elem_dmg": 0,
+                    "special_dmg": 0,
+                    "ult_dmg": 0,
+                    "basic_dmg": 0,
+                    "passive_dmg": 0,
+                })
+        return candidates
+
+    # target == "dps"
+    steps = list(range(0, NORMAL_SLOTS + 1, step))
+    if steps[-1] != NORMAL_SLOTS:
+        steps.append(NORMAL_SLOTS)
+
+    for cr in steps:
+        for cd in steps:
+            for ae in steps:
+                for ap in steps:
+                    for sd in steps:
+                        for ud in steps:
+                            used = cr + cd + ae + ap + sd + ud
+                            if used > NORMAL_SLOTS:
+                                continue
+                            ea = NORMAL_SLOTS - used
+                            candidates.append({
+                                "crit_rate": cr,
+                                "crit_dmg": cd,
+                                "all_elem_dmg": ae,
+                                "atk_pct": ap,
+                                "special_dmg": sd,
+                                "ult_dmg": ud,
+                                "elem_atk": ea,
+
+                                "basic_dmg": 0,
+                                "passive_dmg": 0,
+                                "shield_pct": 0,   # DPS 최적화에서는 0 고정
+                            })
+    return candidates
+
+
+def isle_calc_shield_from_stats(stats: Dict[str, float]) -> float:
+    """
+    최종공격력 = (base_atk + equip_atk_flat + base_elem_atk + elem_atk)
+              * (1+base_atk_pct+atk_pct)
+              * (1+buff_atk_pct_raw)
+              * (1+final_atk_mult)
+    보호막 = 최종공격력 * (1+shield_pct) * 1.008
+    """
+    OA = float(stats.get("base_atk", 0.0)) + float(stats.get("equip_atk_flat", 0.0))
+    EA = float(stats.get("base_elem_atk", 0.0)) + float(stats.get("elem_atk", 0.0))
+
+    equip_atk_pct = 1.0 + float(stats.get("base_atk_pct", 0.0)) + float(stats.get("atk_pct", 0.0))
+    buff_atk_mult = 1.0 + float(stats.get("buff_atk_pct_raw", 0.0))
+    final_atk_mult = 1.0 + float(stats.get("final_atk_mult", 0.0))
+
+    final_atk = (OA + EA) * equip_atk_pct * buff_atk_mult * final_atk_mult
+
+    shield_pct = float(stats.get("shield_pct", 0.0))
+    shield = final_atk * (1.0 + shield_pct) * ISLE_SHIELD_BASE_MULT
+    return shield
+
+
+def _isle_apply_passive_start_effect(base_stats: Dict[str, float]) -> Dict[str, float]:
+    """
+    전투 시작: 버프증폭의 50%만큼 치확 증가, 증가값 최대 60% 제한.
+    """
+    st = dict(base_stats)
+    BA = float(st.get("buff_amp", 0.0))
+    add_cr = min(0.60, 0.50 * BA)
+    st["buff_crit_rate_raw"] += add_cr
+    return st
+
+
+def isle_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: str) -> Dict[str, float]:
+    horizon = 30.0
+
+    promo_on = bool(ISLE_PROMO_ENABLED)
+    base_for_sim = dict(stats)
+
+    if promo_on:
+        base_for_sim["base_atk"] *= ISLE_PROMO_ATK_MULT
+        base_for_sim["final_dmg"] += ISLE_PROMO_FINAL_DMG_ADD
+
+    base_for_sim = _isle_apply_passive_start_effect(base_for_sim)
+
+    s_cd = 10.0
+    u_cd = 30.0
+
+    strike_cd = ISLE_STRIKE_STACK_CD_BASE - (ISLE_STRIKE_STACK_CD_PROMO_REDUCE if promo_on else 0.0)
+    strike_cd = max(0.0, strike_cd)
+
+    shadow_cd = ISLE_SHADOW_CD_BASE - (ISLE_SHADOW_CD_PROMO_REDUCE if promo_on else 0.0)
+    shadow_cd = max(0.0, shadow_cd)
+
+    end_dur = ISLE_END_BUFF_DUR_BASE + (ISLE_END_BUFF_DUR_PROMO_ADD if promo_on else 0.0)
+
+    t = 0.0
+    next_s = 0.0
+    next_u = 0.0
+    next_strike_stack = 0.0
+    next_shadow_ready = 0.0
+
+    stacks = 3 if promo_on else 0
+
+    end_buff_until = -1.0
+    clear_deal_until = -1.0
+    abyss_until = -1.0
+
+    abyss_amt = 0.0
+    abyss_dur = 0.0
+    if artifact_name == "비에 젖은 과거":
+        meta = ARTIFACTS[artifact_name].get("abyss", {}) or {}
+        abyss_amt = float(meta.get("all_elem_dmg", 0.0))
+        abyss_dur = float(meta.get("duration", 0.0))
+
+    total_direct = 0.0
+    total_time = 0.0
+
+    breakdown = {
+        "basic": 0.0,
+        "special": 0.0,
+        "ult": 0.0,
+        "proc": 0.0,
+        "strike": 0.0,
+        "unique": 0.0,
+    }
+
+    def cur_stats_at(time_now: float) -> Dict[str, float]:
+        st = dict(base_for_sim)
+
+        if time_now < clear_deal_until:
+            BA = float(st.get("buff_amp", 0.0))
+            buff_scale = 1.0 + BA
+            st["buff_crit_dmg_raw"] += ISLE_CLEAR_DEAL_CRITDMG * buff_scale
+            if promo_on:
+                st["basic_dmg"] += ISLE_PROMO_BASIC_DMG_CLEAR
+
+        if time_now < end_buff_until:
+            BA = float(st.get("buff_amp", 0.0))
+            buff_scale = 1.0 + BA
+            st["buff_atk_pct_raw"] += ISLE_END_BUFF_ATK_PCT * buff_scale
+            if promo_on:
+                st["basic_dmg"] += ISLE_PROMO_BASIC_DMG_END
+
+        if abyss_amt > 0 and time_now < abyss_until:
+            BA = float(st.get("buff_amp", 0.0))
+            buff_scale = 1.0 + BA
+            st["buff_all_elem_dmg_raw"] += abyss_amt * buff_scale
+
+        return st
+
+    def apply_sonagi_trigger(time_now: float):
+        nonlocal abyss_until
+        if abyss_dur > 0:
+            abyss_until = max(abyss_until, time_now + abyss_dur)
+
+    while t < horizon - 1e-9:
+        # 속성강타 스택 획득(파티 표식 가정)
+        has_marker = ("윈드파라거스 쿠키" in party)
+        if has_marker and strike_cd > 0 and t >= next_strike_stack - 1e-9:
+            stacks = min(ISLE_STACK_MAX, stacks + 1)
+            next_strike_stack = t + strike_cd
+
+        # U > S > C > B
+        if t >= next_u - 1e-9:
+            st = cur_stats_at(t)
+            unit = base_damage_only(st)
+
+            hits = int(ISLE_ULT_DURATION * ISLE_ULT_HITS_PER_SEC + 1e-9)
+            coeff = ISLE_ULT_HIT_COEFF * hits
+            dmg = unit * coeff * skill_bonus_mult(st, "ult")
+
+            total_direct += dmg
+            breakdown["ult"] += dmg
+            apply_sonagi_trigger(t)
+
+            clear_deal_until = max(clear_deal_until, t + ISLE_CLEAR_DEAL_DUR)
+            stacks = min(ISLE_STACK_MAX, stacks + ISLE_STACK_FROM_U)
+
+            dt = ISLE_CAST_TIME["U"]
+            t += dt
+            total_time += dt
+            next_u = t - dt + u_cd
+            continue
+
+        if t >= next_s - 1e-9:
+            st = cur_stats_at(t)
+            unit = base_damage_only(st)
+
+            dmg = unit * ISLE_SPECIAL_COEFF * skill_bonus_mult(st, "special")
+            total_direct += dmg
+            breakdown["special"] += dmg
+            apply_sonagi_trigger(t)
+
+            stacks = min(ISLE_STACK_MAX, stacks + ISLE_STACK_FROM_S)
+
+            dt = ISLE_CAST_TIME["S"]
+            t += dt
+            total_time += dt
+            next_s = t - dt + s_cd
+            continue
+
+        if stacks >= 3 and t >= next_shadow_ready - 1e-9:
+            st = cur_stats_at(t)
+            unit = base_damage_only(st)
+
+            ch_coeff = ISLE_CHARGE_HIT_COEFF * int(ISLE_CHARGE_HITS)
+            ch_dmg = unit * ch_coeff * skill_bonus_mult(st, "special")
+
+            sh_coeff = ISLE_SHADOW_HIT_COEFF * int(ISLE_SHADOW_HITS)
+            sh_dmg = unit * sh_coeff * skill_bonus_mult(st, "special")
+
+            if promo_on:
+                ch_dmg *= ISLE_PROMO_CHARGE_SHADOW_MULT
+                sh_dmg *= ISLE_PROMO_CHARGE_SHADOW_MULT
+
+            total_direct += (ch_dmg + sh_dmg)
+            breakdown["special"] += ch_dmg
+            breakdown["proc"] += sh_dmg
+            apply_sonagi_trigger(t)
+
+            stacks -= 3
+            end_buff_until = max(end_buff_until, t + end_dur)
+            next_shadow_ready = t + shadow_cd
+
+            dt = ISLE_CAST_TIME["C"]
+            t += dt
+            total_time += dt
+            continue
+
+        # B
+        st = cur_stats_at(t)
+        unit = base_damage_only(st)
+
+        dmg = unit * ISLE_BASIC_COEFF * skill_bonus_mult(st, "basic")
+        total_direct += dmg
+        breakdown["basic"] += dmg
+
+        dt = ISLE_CAST_TIME["B"]
+        t += dt
+        total_time += dt
+
+    strike = strike_total_from_direct(total_direct, "이슬맛 쿠키", base_for_sim, party)
+    breakdown["strike"] = strike
+
+    unit0 = base_damage_only(cur_stats_at(0.0))
+    unique_total = unit0 * float(base_for_sim.get("unique_extra_coeff", 0.0)) * total_time
+    breakdown["unique"] = unique_total
+
+    total_damage = total_direct + strike + unique_total
+    dps = total_damage / total_time if total_time > 0 else 0.0
+
+    return {
+        "total_damage": total_damage,
+        "total_time": total_time,
+        "dps": dps,
+
+        "breakdown_basic": breakdown["basic"],
+        "breakdown_special": breakdown["special"],
+        "breakdown_ult": breakdown["ult"],
+        "breakdown_proc": breakdown["proc"],
+        "breakdown_strike": breakdown["strike"],
+        "breakdown_unique": breakdown["unique"],
+    }
+
+
+def optimize_isle_cycle(
+    seaz_name: str,
+    party: List[str],
+    step: int = 7,  # (호환용) DPS탐색 step이었는데, 여기서는 "보호막 최적"이 목적이라 사실상 안 씀
+    progress_cb: Optional[Callable[[float], None]] = None,
+    equip_override: Optional[Union[str, List[str]]] = None,
+) -> Optional[dict]:
+    """
+    항상 '보호막 최적' 샤드 배치를 찾는다.
+    단, RESULT에 필요한 DPS/사이클도 같은 세팅으로 같이 계산해서 반환한다.
+    - best 선택: max_shield 최우선, 동률이면 dps로 타이브레이크
+    """
+    cookie = "이슬맛 쿠키"
+    base = BASE_STATS_ISLE[cookie].copy()
+
+    # equip 후보만 구성
+    equips = list(EQUIP_SETS.keys())
+    if equip_override:
+        if isinstance(equip_override, str) and equip_override.strip():
+            equips = [equip_override.strip()]
+        elif isinstance(equip_override, (list, tuple)):
+            equips = _resolve_equip_list_override(equip_override, equips)
+
+    artifact_name = ISLE_FIXED_ARTIFACT
+    unique_name   = ISLE_FIXED_UNIQUE
+    pot           = ISLE_FIXED_POT
+
+    # 보호막 후보(정확 전수조사)
+    shard_candidates = isle_generate_shard_candidates(target="shield", step=step)
+
+    total = max(1, len(equips) * len(shard_candidates))
+    done = 0
+    tick = max(1, total // 250)
+
+    def _emit(p: float):
+        if progress_cb is None:
+            return
+        try:
+            progress_cb(p)
+        except Exception:
+            pass
+
+    _emit(0.0)
     best = None
-    for elem_slots in range(NORMAL_SLOTS + 1):
-        for atk_pct_slots in range(NORMAL_SLOTS - elem_slots + 1):
-            shield_slots = NORMAL_SLOTS - elem_slots - atk_pct_slots
-            final_atk, final_shield = calc_isle_shield(elem_slots, atk_pct_slots, shield_slots)
-            if best is None or final_shield > best["max_shield"]:
-                best = {
-                    "cookie": "이슬맛 쿠키",
-                    "party": party,
-                    "equip_fixed": "전설의 유령해적 세트",
-                    "seaz_fixed": FIXED_SEAZ_ISLE,
-                    "potentials_fixed": ISLE_FIXED_POT,
-                    "final_atk": final_atk,
-                    "max_shield": final_shield,
-                    "shards": {
-                        "elem_atk": elem_slots,
-                        "atk_pct": atk_pct_slots,
-                        "shield_pct": shield_slots,
-                    }
-                }
+
+    zero_shards = {k: 0 for k in SHARD_INC.keys()}
+
+    for equip in equips:
+        stats_template = build_stats_for_combo(
+            cookie_name_kr=cookie,
+            base=base,
+            shards=zero_shards,
+            potentials=pot,
+            equip_name=equip,
+            seaz_name=seaz_name,
+            unique_name=unique_name,
+            party=party,
+            artifact_name=artifact_name,
+        )
+        if not is_valid_by_caps(stats_template):
+            continue
+
+        for shards in shard_candidates:
+            done += 1
+            if (done % tick) == 0:
+                _emit(done / total)
+
+            stats = dict(stats_template)
+            for k, slots in shards.items():
+                inc = SHARD_INC.get(k, 0.0)
+                if inc != 0.0 and slots:
+                    stats[k] = stats.get(k, 0.0) + inc * slots
+
+            if not is_valid_by_caps(stats):
+                continue
+
+            # 보호막 + DPS(RESULT용) 둘 다 계산
+            shield = isle_calc_shield_from_stats(stats)
+            cycle  = isle_cycle_damage(stats, party, artifact_name)
+
+            cur = {
+                "cookie": cookie,
+
+                # RESULT용(항상 존재)
+                "dps": cycle["dps"],
+                "cycle_total_damage": cycle["total_damage"],
+                "cycle_total_time": cycle["total_time"],
+                "cycle_breakdown": cycle,
+
+                # 보호막 최적화용(항상 존재)
+                "max_shield": shield,
+
+                # UI 고정키
+                "equip_fixed": equip,
+                "seaz_fixed": seaz_name,
+                "unique_fixed": unique_name,
+                "artifact_fixed": artifact_name,
+                "potentials_fixed": pot,
+
+                # 호환 키
+                "equip": equip,
+                "seaz": seaz_name,
+                "unique": unique_name,
+                "artifact": artifact_name,
+                "potentials": pot,
+
+                "shards": {
+                    # UI에서는 이 3개만 보여주면 깔끔
+                    "elem_atk": int(shards.get("elem_atk", 0)),
+                    "atk_pct": int(shards.get("atk_pct", 0)),
+                    "shield_pct": int(shards.get("shield_pct", 0)),
+                },
+                "party": party,
+                "stats": stats,
+            }
+
+            # best 갱신: shield 우선, 동률이면 dps
+            if best is None:
+                best = cur
+            else:
+                if cur["max_shield"] > best["max_shield"] + 1e-9:
+                    best = cur
+                elif abs(cur["max_shield"] - best["max_shield"]) <= 1e-9 and cur["dps"] > best["dps"]:
+                    best = cur
+
+    _emit(1.0)
     return best
