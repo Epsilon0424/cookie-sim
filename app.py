@@ -604,6 +604,12 @@ def norm_none(x: str) -> str:
 # =====================================================
 # 유틸: DF -> HTML Table (n컬럼 지원, tooltip 포함)
 # =====================================================
+def hide_breeder_when_not_wind(cookie_name: str, options: list[str]) -> list[str]:
+    # 윈드파라거스일 때만 "믿음직한 브리더" 노출
+    if cookie_name == "윈드파라거스 쿠키":
+        return options
+    return [x for x in options if "믿음직한 브리더" not in str(x)]
+
 def df_to_html_table(
     df: pd.DataFrame,
     small: bool = False,
@@ -1093,7 +1099,8 @@ with st.container(key="outer_shell", border=False):
                 st.session_state.party = [x for x in [norm_none(p1)] if x]
 
             elif cookie == "멜랑크림 쿠키":
-                seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")] or [""]
+                seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")]
+                seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [""]
 
                 PREFERRED_SEAZ = "바닐라몬드:추격자의 결의"
 
@@ -1136,9 +1143,10 @@ with st.container(key="outer_shell", border=False):
 
             else:
                 fixed_seaz = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
-                st.session_state[sk] = fixed_seaz
-                st.selectbox("시즈나이트 선택", [fixed_seaz], label_visibility="collapsed", disabled=True, key=sk)
-                st.session_state.seaz = fixed_seaz
+                fixed_list = hide_breeder_when_not_wind(cookie, [fixed_seaz])
+                st.session_state[sk] = fixed_list[0]
+                st.selectbox("시즈나이트 선택", fixed_list, label_visibility="collapsed", disabled=True, key=sk)
+                st.session_state.seaz = fixed_list[0]
 
                 st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
                 party_all = ["없음", "윈드파라거스 쿠키"]
