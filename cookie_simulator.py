@@ -251,8 +251,8 @@ EQUIP_SETS = {
     },
     "전설의 유령해적 세트": {
         "head": {"base": {"all_elem_dmg": 0.312}, "unique": {"atk_pct": 0.30}},
-        "top":  {"base": {"def_pct": 0.52}, "unique": {"hp_pct": 0.30}},
-        "bottom":{"base": {"hp_pct": 0.52}, "unique": {"def_pct": 0.30}},
+        "top":  {"base": {"def_pct": 0.52},       "unique": {"hp_pct": 0.30}},
+        "bottom":{"base": {"hp_pct": 0.52},       "unique": {"def_pct": 0.30}},
         "set_effect": {"base": {"all_elem_dmg": 0.30, "def_reduction_raw": 0.10}}
     },
     "황금 예복 세트": {
@@ -284,9 +284,9 @@ SEAZNITES = {
 
     "리치코랄:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": RICH_CORAL_SUB},
 
-    "바닐라몬드:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": VANILLA_MONDE_SUB},
+    "바닐라몬드:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.0, "element_strike_dmg": 0.0}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:듬직한 격투가":   {"passive": {"special_dmg": 0.30, "ult_dmg": 0.30}, "sub": VANILLA_MONDE_SUB},
-    "바닐라몬드:사냥꾼의 본능":   {"passive": {"final_dmg_stack": 0.05, "max_stacks": 6}, "sub": VANILLA_MONDE_SUB},
+    "바닐라몬드:사냥꾼의 본능":   {"passive": {"final_dmg_stack": 0.00, "max_stacks": 0}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:위대한 통치자":   {"passive": {"ult_dmg": 0.60}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:거침없는 습격자": {"passive": {"special_dmg": 0.40, "ult_dmg": 0.20}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:영예로운 기사도": {"passive": {"basic_dmg": 0.40, "special_dmg": 0.20}, "sub": VANILLA_MONDE_SUB},
