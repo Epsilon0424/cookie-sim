@@ -8,6 +8,26 @@ import textwrap
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
 STEP_FIXED = 7
 
+def render_table_card(title: str, rows: list[tuple[str, str]]):
+    if not rows:
+        return False
+
+    with st.container(border=True):
+        st.markdown(f'<div class="h-title">{title}</div>', unsafe_allow_html=True)
+        df = pd.DataFrame(rows, columns=["항목", "값"])
+        st.dataframe(df, use_container_width=True, hide_index=True)
+    return True
+
+def render_cards_flow(cards, per_row=3):
+    i = 0
+    while i < len(cards):
+        chunk = cards[i:i+per_row]
+        cols = st.columns(len(chunk), gap="small")
+        for col, render_fn in zip(cols, chunk):
+            with col:
+                render_fn()
+        i += per_row
+
 st.markdown(
 """
 <style>
@@ -22,12 +42,12 @@ st.markdown(
                  "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", "Helvetica Neue",
                  Arial, sans-serif;
 
-  --FS_APP: 14px;   /* 14 -> 13 */
-  --FS_XS: 11px;    /* 11 -> 10 */
-  --FS_SM: 12px;    /* 12 -> 11 */
-  --FS_MD: 13px;    /* 13 -> 12 */
-  --FS_LG: 16px;    /* 16 -> 15 */
-  --FS_XL: 19px;    /* 22 -> 20 */
+  --FS_APP: 14px; 
+  --FS_XS: 11px;
+  --FS_SM: 12px;
+  --FS_MD: 13px;
+  --FS_LG: 16px;
+  --FS_XL: 19px;
 
   --FW_R: 500;
   --FW_M: 600;
@@ -331,6 +351,10 @@ li[role="option"][aria-selected="true"]{
   border-color: #d1d5db !important;
   background: #f9fafb !important;
 }
+.st-key-run_btn button,
+.st-key-run_btn button *{
+  font-weight: 700 !important;
+}
 
 /* =====================================================
    8) Divider + Tabs spacing
@@ -471,8 +495,8 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  font-weight: 900;
+  font-size: 10px;
+  font-weight: 800;
   color: #ffffff;
   letter-spacing: 0.2px;
   text-shadow: 0 1px 2px rgba(0,0,0,0.25);
@@ -664,18 +688,36 @@ def labeled_table_html(title: str, df: pd.DataFrame, small: bool = False, col_ra
         body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
 
-def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
-    html = textwrap.dedent(f"""\
-<div class="stat-grid">
-  <div>{labeled_table_html("공격력", atk_df, small=False)}</div>
-  <div>{labeled_table_html("치명타", crit_df, small=False)}</div>
-  <div>{labeled_table_html("피해 보정", common_df, small=False)}</div>
+def labeled_table_html_optional(
+    title: str,
+    df: pd.DataFrame,
+    small: bool = False,
+    col_ratio=(0.38, 0.62),
+    col_widths=None
+) -> str:
+    if df is None or df.empty:
+        return ""
 
-  <div>{labeled_table_html("스킬 타입 피해 증가", skill_df, small=False)}</div>
-  <div>{labeled_table_html("(파티) 보호막 / 방어", surv_df, small=False)}</div>
-  <div>{labeled_table_html("(파티) 버프 / 디버프 증폭", amp_df, small=False)}</div>
-</div>
-""")
+    pill = f'<div class="stat-pill">{_html.escape(title)}</div>'
+    body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
+    return f'<div class="stat-wrap">{pill}{body}</div>'
+
+def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
+    items = []
+
+    def add(title, df):
+        block = labeled_table_html_optional(title, df, small=False)
+        if block:
+            items.append(f"<div>{block}</div>")
+
+    add("공격력", atk_df)
+    add("치명타", crit_df)
+    add("피해 보정", common_df)
+    add("스킬 타입 피해 증가", skill_df)
+    add("(파티) 보호막 / 방어", surv_df)
+    add("(파티) 버프 / 디버프 증폭", amp_df)
+
+    html = "<div class='stat-grid'>" + "".join(items) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
 # =====================================================
@@ -780,9 +822,9 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
     EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
 
-    atk_pct_sum   = float(eff.get("atk_pct_sum", 0.0))
-    atk_pct_equiv = float(eff.get("atk_pct_equiv", 0.0))
-    final_atk_add = float(eff.get("final_atk_mult_add", 0.0))
+    atk_pct_sum   = eff["atk_pct_sum"]        # 화면 표시용: 그냥 합(+)
+    atk_pct_equiv = eff["atk_pct_equiv"]      # 최종공 계산용: 실제 곱규칙을 등가(%)로 환산한 값
+    final_atk_add = eff["final_atk_mult_add"]
 
     # 최종 공격력(수치)은 “실제 배율”로 계산
     final_atk_input = (OA + EA) * (1.0 + atk_pct_equiv) * (1.0 + final_atk_add)
@@ -806,7 +848,7 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     crit_df = pd.DataFrame(crit_rows, columns=["항목", "값"])
 
     # =========================
-    # 피해 보정 (전부 “합”으로 표시)
+    # 피해 보정
     # =========================
     common_rows = []
     add_if_nonzero(common_rows, "모든 속성 피해", _fmt_pct(float(eff.get("eff_all_elem_dmg", 0.0))), float(eff.get("eff_all_elem_dmg", 0.0)))
@@ -818,16 +860,16 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
 
     add_if_nonzero(common_rows, "피해량", _fmt_pct(float(eff.get("dmg_bonus", 0.0))), float(eff.get("dmg_bonus", 0.0)))
 
-    # ✅ 최종피해도 “합”으로 표시
+    # 최종피해
     add_if_nonzero(common_rows, "최종 피해", _fmt_pct(float(eff.get("final_dmg_sum", 0.0))), float(eff.get("final_dmg_sum", 0.0)))
 
-    # 속성강타 피해 증가도 합(가산) 항목이니 여기 넣어도 됨
+    # 속성강타 피해 증가
     add_if_nonzero(common_rows, "속성강타 피해", _fmt_pct(float(eff.get("element_strike_dmg", 0.0))), float(eff.get("element_strike_dmg", 0.0)))
 
     common_df = pd.DataFrame(common_rows, columns=["항목", "값"])
 
     # =========================
-    # 스킬 타입 피해 증가(그대로 가산)
+    # 스킬 타입 피해 증가
     # =========================
     skill_rows = []
     add_if_nonzero(skill_rows, "기본공격 피해", _fmt_pct(_f(stats, "basic_dmg", 0.0)), _f(stats, "basic_dmg", 0.0))
@@ -837,7 +879,7 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     skill_df = pd.DataFrame(skill_rows, columns=["항목", "값"])
 
     # =========================
-    # 보호막/방어 (가산)
+    # 보호막/방어
     # =========================
     surv_rows = []
     add_if_nonzero(surv_rows, "보호막 %", _fmt_pct(_f(stats, "shield_pct", 0.0)), _f(stats, "shield_pct", 0.0))
@@ -845,11 +887,37 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     surv_df = pd.DataFrame(surv_rows, columns=["항목", "값"])
 
     # =========================
-    # 버프/디버프 증폭 (가산)
+    # 버프/디버프 증폭
     # =========================
+    def pick_num(*keys, default=0.0):
+        # 1) eff 우선
+        for k in keys:
+            if k in eff and eff.get(k) is not None:
+                try:
+                    return float(eff.get(k))
+                except Exception:
+                    pass
+        # 2) stats fallback
+        for k in keys:
+            if k in stats and stats.get(k) is not None:
+                try:
+                    return float(stats.get(k))
+                except Exception:
+                    pass
+        return float(default)
+
+    buff_amp = pick_num(
+        "party_buff_amp_total",
+        "buff_amp_total"
+    )
+    debuff_amp = pick_num(
+        "party_debuff_amp_total",
+        "debuff_amp_total"
+    )
+
     amp_rows = []
-    add_if_nonzero(amp_rows, "버프 증폭", _fmt_pct(float(eff.get("buff_amp", 0.0))), float(eff.get("buff_amp", 0.0)))
-    add_if_nonzero(amp_rows, "디버프 증폭", _fmt_pct(float(eff.get("debuff_amp", 0.0))), float(eff.get("debuff_amp", 0.0)))
+    add_if_nonzero(amp_rows, "버프 증폭", _fmt_pct(buff_amp), buff_amp)
+    add_if_nonzero(amp_rows, "디버프 증폭", _fmt_pct(debuff_amp), debuff_amp)
     amp_df = pd.DataFrame(amp_rows, columns=["항목", "값"])
 
     return atk_df, crit_df, common_df, skill_df, surv_df, amp_df
@@ -1081,7 +1149,7 @@ with st.container(key="outer_shell", border=False):
 
             st.markdown('<hr class="u-divider">', unsafe_allow_html=True)
 
-            run = st.button("실행", type="primary", use_container_width=True)
+            run = st.button("실행", type="primary", use_container_width=True, key="run_btn")
 
             progress_slot = st.empty()
 
@@ -1285,8 +1353,9 @@ st.markdown(
   <div class="note-title">Notes</div>
   <p class="note-text">
     • 화면에 표시되는 수치는 대부분 <b>가산(+)</b>으로 누적된 <b>합</b>입니다.<br/>
-    • 단, 일부 스탯은 <b>배율(×)</b>로 곱해져 적용되며, <b>승급 스탯은 전부 배율(×)</b>로 계산됩니다.<br/>
-    • 그러므로 단순 <b>합(+)</b>만으로 계산하면 실제 적용값과 <b>차이</b>가 날 수 있습니다.<br/>
+    • 단, 일부 스탯은 <b>배율(×)</b>로 곱해져 적용됩니다.<br/>
+    • 특히 <b>버프/디버프 증폭</b>은 전투에서 여러 값에 <b>곱연산</b>으로 적용되는 경우가 있어, 표시 방식과 실제 적용값이 달라질 수 있습니다.<br/>
+    • 따라서 단순 <b>합(+)</b>만으로 해석하면 실제 적용값과 <b>차이</b>가 날 수 있습니다.<br/>
     • 기타 문의 : <b>Epsilon24@gmail.com</b>
   </p>
 </div>
