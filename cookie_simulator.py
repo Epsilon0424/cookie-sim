@@ -121,6 +121,49 @@ def add(stats: Dict[str, float], bonus: Dict[str, float]):
         add_stat(stats, k, float(v))
 
 # =====================================================
+# 잎새의 활강(Leaf Glide)
+# =====================================================
+LEAF_GLIDE_RES_RED_PER_STACK = 0.0056   # 0.56%
+LEAF_GLIDE_BASE_MAX_STACKS   = 50
+WIND_PROMO_LEAF_GLIDE_MAX_STACK_ADD = 10  # 승급: 중첩 +10 (max +10으로 가정)
+
+LEAF_GLIDE_FINALDMG_PER_DEBUFFAMP = 1.25  # debuff_amp의 125%
+LEAF_GLIDE_FINALDMG_CAP = 1.0             # 최대 +100%
+
+def apply_leaf_glide(stats: Dict[str, float], party: List[str], main_cookie_name: str):
+    """
+    잎새의 활강을 '적 디버프'로 가정해 상시 풀중첩 적용(근사).
+    - 내성 감소: elem_res_reduction_raw에 누적
+    - 잎새 대상 공격 시 최종피해 증가: +min(1.0, 1.25*debuff_amp)
+
+    ※ debuff_amp 기준:
+      - 문구 그대로면 '공격자의 debuff_amp'를 쓰는 게 자연스러워서 stats["debuff_amp"] 사용.
+      - 만약 '윈파의 debuff_amp가 팀에 공유'라고 가정하려면 party_debuff_amp_total로 바꿔도 됨.
+    """
+    has_wind = ("윈드파라거스 쿠키" in (party or [])) or (main_cookie_name == "윈드파라거스 쿠키")
+    if not has_wind:
+        return stats
+
+    # 중복 적용 방지
+    applied = stats.setdefault("_applied_enemy_debuffs", set())
+    if "LEAF_GLIDE" in applied:
+        return stats
+
+    # 승급으로 max stack +10 (윈파 승급 ON일 때)
+    max_stacks = LEAF_GLIDE_BASE_MAX_STACKS + (WIND_PROMO_LEAF_GLIDE_MAX_STACK_ADD if WIND_PROMO_ENABLED else 0)
+
+    stacks = max_stacks  # 여기서는 '상시 풀중첩' 근사
+    stats["elem_res_reduction_raw"] = float(stats.get("elem_res_reduction_raw", 0.0)) + (LEAF_GLIDE_RES_RED_PER_STACK * stacks)
+
+    # 최종피해 증가 = min(100%, 125% * debuff_amp)
+    da = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
+    add_final = min(LEAF_GLIDE_FINALDMG_CAP, LEAF_GLIDE_FINALDMG_PER_DEBUFFAMP * da)
+    stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + add_final
+
+    applied.add("LEAF_GLIDE")
+    return stats
+
+# =====================================================
 # 2) 공통 데이터(쿠키/속성/직업/형태)
 # =====================================================
 
@@ -613,7 +656,14 @@ def base_damage_only(stats: Dict[str, float]) -> float:
     # -----------------------------
     # 디버프증폭 적용: 방깎/내성깎만
     # -----------------------------
-    DA = float(stats.get("debuff_amp", 0.0))
+
+    def get_party_DA(stats: Dict[str, float]) -> float:
+        return float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
+
+    def get_party_BA(stats: Dict[str, float]) -> float:
+        return float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
+
+    DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
     debuff_scale = 1.0 + DA
 
     def_reduction = clamp(float(stats.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
@@ -688,7 +738,7 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
     eff_all_elem = float(s.get("all_elem_dmg", 0.0)) + float(s.get("buff_all_elem_dmg_raw", 0.0))
     eff_armor_pen = clamp(float(s.get("armor_pen", 0.0)) * promo_ap_mult, 0.0, 0.8)
 
-    DA = float(s.get("debuff_amp", 0.0))
+    DA = float(s.get("party_debuff_amp_total", s.get("debuff_amp", 0.0)))
     debuff_scale = 1.0 + DA
 
     eff_def_red      = clamp(float(s.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
@@ -773,7 +823,7 @@ def strike_total_from_direct(
 
     # (3) 표식 속성저항(별도 적용)
     # 디버프증폭이 표식저항감소에도 적용되게 raw를 사용
-    DA = float(stats.get("debuff_amp", 0.0))
+    DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
     debuff_scale = 1.0 + DA
     mark_res_red = float(stats.get("mark_res_reduction_raw", 0.0)) * debuff_scale
 
@@ -1018,7 +1068,6 @@ def build_stats_for_combo(
                 stats["final_dmg"] += passive["final_dmg_stack"] * passive["max_stacks"]
 
     # --- 설유(atk_pct) 출처 기록용 before ---
-
     for k, slots in shards.items():
         if k in SHARD_INC:
             add_stat(stats, k, slots * SHARD_INC[k])
@@ -1040,6 +1089,8 @@ def build_stats_for_combo(
     stats["debuff_amp_total"] = float(stats.get("debuff_amp", 0.0))
     _apply_party_amp_totals(stats, party, cookie_name_kr)
     apply_party_buffs(stats, party, cookie_name_kr)
+    # 잎새의 활강(적 디버프) 적용: 파티에 윈파가 있으면 상시 풀중첩 근사
+    apply_leaf_glide(stats, party, cookie_name_kr)
 
     return stats
 
@@ -1098,8 +1149,15 @@ WIND_ALWAYS_EMPOWERED_CHARGE = True
 
 WIND_CYCLE_TOKENS = [
     "S", "U", "C",
-    "B", "B", "B",
-    "S", "B", "C",
+    "B",
+    "ARGO1",   # 충성의 기류 1타(자동, 시간 0)
+    "B",
+    "ARGO2",   # 충성의 기류 2타(자동, 시간 0)
+    "B",
+    "ARGO3",   # 충성의 기류 3타(자동, 시간 0)
+    "S", "FW", # S 이후 자유로운 비상(자동, 시간 0) 같이 들어감
+    "B",
+    "C",
     "B", "B", "B",
 ]
 
@@ -1175,6 +1233,7 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
     total_time = 0.0
     empowered_charge_count = 0
 
+    # 시간 계산: 플레이어 액션만 시간 증가, ARGO/FW는 시간 0
     for tok in WIND_CYCLE_TOKENS:
         if tok == "B":
             total_time += WIND_TIME["B"]
@@ -1184,9 +1243,12 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
             total_time += WIND_TIME["U"]
         elif tok == "C":
             total_time += WIND_TIME["C"]
+            # 에메랄딘 업타임 트리거(기존 로직 유지)
             if WIND_ALWAYS_EMPOWERED_CHARGE:
                 empowered_charge_count += 1
+        # ARGO/FW는 시간 0
 
+    # ---- 에메랄딘 업타임(기존 유지)
     emeraldin_bonus = 0.0
     if artifact_name == "이어지는 마음":
         em = ARTIFACTS[artifact_name].get("emeraldin", {})
@@ -1207,7 +1269,16 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
     unit = base_damage_only(local_stats)
 
     direct = 0.0
-    breakdown = {"basic": 0.0, "special": 0.0, "ult": 0.0, "charge": 0.0, "strike": 0.0, "unique": 0.0}
+    breakdown = {
+        "basic": 0.0,
+        "special": 0.0,
+        "ult": 0.0,
+        "charge": 0.0,
+        "argo": 0.0,       # 추가(자동 충성)
+        "free_wing": 0.0,  # 추가(자동 비상)
+        "strike": 0.0,
+        "unique": 0.0
+    }
 
     def do_basic():
         nonlocal direct
@@ -1228,12 +1299,41 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         breakdown["ult"] += dmg
 
     def do_charge():
+        """
+        변경 포인트
+        - 기존: C에 FREE_WING를 얹어버렸는데, 이제 FW는 별도 자동타로 분리.
+        - 따라서 C는 '차징(플레이어)' 데미지로만 계산.
+        """
         nonlocal direct
-        coeff = WIND_FREE_WING_COEFF if WIND_ALWAYS_EMPOWERED_CHARGE else WIND_CHARGE_COEFF
-        dmg = unit * coeff * skill_bonus_mult(local_stats, "special")
+        coeff = WIND_CHARGE_COEFF   # 여기로 고정 (FREE_WING는 FW 토큰에서 처리)
+        dmg = unit * coeff * skill_bonus_mult(local_stats, "basic")
         direct += dmg
         breakdown["charge"] += dmg
 
+    def do_argo(n: int):
+        """충성의 기류: 기본공격 피해 취급, 공격속도 영향 X(시간 0)."""
+        nonlocal direct
+        if n == 1:
+            coeff = WIND_LOYALTY_1_COEFF
+        elif n == 2:
+            coeff = WIND_LOYALTY_2_COEFF
+        else:
+            coeff = WIND_LOYALTY_3_COEFF
+
+        dmg = unit * coeff * skill_bonus_mult(local_stats, "basic")
+        direct += dmg
+        breakdown["argo"] += dmg
+        breakdown["basic"] += dmg  # 기본공 피해 취급이므로 basic에도 합산(원치 않으면 제거)
+
+    def do_free_wing():
+        """자유로운 비상: 특수스킬 피해 취급, 시간 0."""
+        nonlocal direct
+        dmg = unit * WIND_FREE_WING_COEFF * skill_bonus_mult(local_stats, "special")
+        direct += dmg
+        breakdown["free_wing"] += dmg
+        breakdown["special"] += dmg  # 특수 피해 취급이므로 special에도 합산(원치 않으면 제거)
+
+    # 실제 사이클 데미지
     for tok in WIND_CYCLE_TOKENS:
         if tok == "B":
             do_basic()
@@ -1243,11 +1343,19 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
             do_ult()
         elif tok == "C":
             do_charge()
+        elif tok == "FW":
+            do_free_wing()
+        elif tok == "ARGO1":
+            do_argo(1)
+        elif tok == "ARGO2":
+            do_argo(2)
+        elif tok == "ARGO3":
+            do_argo(3)
 
     strike = strike_total_from_direct(direct, "윈드파라거스 쿠키", local_stats, party)
     breakdown["strike"] = strike
 
-    unique_total = unit * local_stats.get("unique_extra_coeff", 0.0) * total_time
+    unique_total = unit * float(local_stats.get("unique_extra_coeff", 0.0)) * total_time
     breakdown["unique"] = unique_total
 
     total_damage = direct + strike + unique_total
@@ -1257,10 +1365,16 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         "total_damage": total_damage,
         "total_time": total_time,
         "dps": dps,
+
         "breakdown_basic": breakdown["basic"],
         "breakdown_special": breakdown["special"],
         "breakdown_ult": breakdown["ult"],
         "breakdown_charge": breakdown["charge"],
+
+        # 추가로 보고 싶으면 UI에 뿌리기 좋게 반환
+        "breakdown_argo": breakdown["argo"],
+        "breakdown_free_wing": breakdown["free_wing"],
+
         "breakdown_strike": breakdown["strike"],
         "breakdown_unique": breakdown["unique"],
         "_emeraldin_avg_critdmg_bonus": emeraldin_bonus,
