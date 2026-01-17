@@ -3,10 +3,9 @@ import html as _html
 import streamlit as st
 import pandas as pd
 import cookie_simulator as sim
-import textwrap
 
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
-STEP_FIXED = 7
+STEP_FIXED = 2
 
 def render_table_card(title: str, rows: list[tuple[str, str]]):
     if not rows:
@@ -963,7 +962,7 @@ if "_cookie_prev" not in st.session_state:
     st.session_state._cookie_prev = st.session_state.cookie
 
 def kind_of(cookie_name: str) -> str:
-    return {"윈드파라거스 쿠키": "wind", "멜랑크림 쿠키": "melan", "이슬맛 쿠키": "isle"}.get(cookie_name, "melan")
+    return {"윈드파라거스 쿠키": "wind", "멜랑크림 쿠키": "melan", "이슬맛 쿠키": "isle", "흑보리맛 쿠키": "bb",}.get(cookie_name, "melan")
 
 def seaz_key(kind: str) -> str:
     return f"seaz_widget__{kind}"
@@ -999,7 +998,7 @@ with st.container(key="outer_shell", border=False):
             st.markdown('<div class="h-title">SELECT</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="ctl-label">쿠키</div>', unsafe_allow_html=True)
-            cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "이슬맛 쿠키"]
+            cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "흑보리맛 쿠키", "이슬맛 쿠키"]
 
             if "cookie_widget" not in st.session_state:
                 st.session_state.cookie_widget = st.session_state.cookie
@@ -1026,12 +1025,19 @@ with st.container(key="outer_shell", border=False):
                 st.session_state.equip = ""
 
                 k2 = kind_of(cookie)
+
                 st.session_state[seaz_key(k2)] = ""
 
-                st.session_state[party1_key(k2)] = "이슬맛 쿠키"
-                st.session_state[party2_key(k2)] = "윈드파라거스 쿠키"
+                # kind별 파티 기본값
+                if k2 in ("melan", "bb"):
+                    st.session_state[party1_key(k2)] = "이슬맛 쿠키"
+                    st.session_state[party2_key(k2)] = "윈드파라거스 쿠키"
+                elif k2 == "wind":
+                    st.session_state[party1_key(k2)] = "이슬맛 쿠키"
+                elif k2 == "isle":
+                    st.session_state[party1_key(k2)] = "윈드파라거스 쿠키"
 
-                #  쿠키별 위젯 키도 리셋
+                # 쿠키별 위젯 키도 리셋
                 st.session_state[mode_key(k2)] = "최적(자동)"
                 st.session_state[equip_key(k2)] = ""
 
@@ -1065,6 +1071,8 @@ with st.container(key="outer_shell", border=False):
                     equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
                 elif cookie == "멜랑크림 쿠키":
                     equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
+                elif cookie == "흑보리맛 쿠키":
+                    equip_options = (getattr(sim, "black_barley_allowed_equips", lambda: [""])() or [""])
                 else:
                     equip_options = ["전설의 유령해적 세트"]
 
@@ -1111,6 +1119,51 @@ with st.container(key="outer_shell", border=False):
                 seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
                 st.session_state.seaz = seaz
 
+                with st.container(key="party_group", border=False):
+                    st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
+
+                    party_all = ["없음", "이슬맛 쿠키", "윈드파라거스 쿠키"]
+
+                    init_once(p1k, "이슬맛 쿠키")
+                    init_once(p2k, "윈드파라거스 쿠키")
+
+                    p1 = st.selectbox("파티 슬롯 1", party_all, label_visibility="collapsed", key=p1k)
+
+                    if p1 == "이슬맛 쿠키":
+                        party2_opts = ["없음", "윈드파라거스 쿠키"]
+                    elif p1 == "윈드파라거스 쿠키":
+                        party2_opts = ["없음", "이슬맛 쿠키"]
+                    else:
+                        party2_opts = party_all
+
+                    if st.session_state.get(p2k, "없음") not in party2_opts:
+                        st.session_state[p2k] = "없음"
+
+                    p2 = st.selectbox("파티 슬롯 2", party2_opts, label_visibility="collapsed", key=p2k)
+
+                    if p1 != "없음" and p2 == p1:
+                        st.session_state[p2k] = "없음"
+                        p2 = "없음"
+
+                    party_list = [norm_none(p1), norm_none(p2)]
+                    party_list = [x for x in party_list if x]
+                    st.session_state.party = party_list
+                    
+            elif cookie == "흑보리맛 쿠키":
+                seaz_options = (getattr(sim, "black_barley_allowed_seaz", lambda: None)() or
+                                [x for x in sim.SEAZNITES.keys() if x.startswith("페퍼루비:")])
+                seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [""]
+
+                PREFERRED_SEAZ = "페퍼루비:영예로운 기사도"
+
+                cur = st.session_state.get(sk, "")
+                if (not cur) or (cur not in seaz_options):
+                    st.session_state[sk] = (PREFERRED_SEAZ if (PREFERRED_SEAZ and PREFERRED_SEAZ in seaz_options) else seaz_options[0])
+
+                seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
+                st.session_state.seaz = seaz
+
+                # 2) 파티(2슬롯)
                 with st.container(key="party_group", border=False):
                     st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
 
@@ -1207,6 +1260,17 @@ with st.container(key="outer_shell", border=False):
                         equip_override=equip_override_local,
                     )
                     best_kind = "melan"
+                
+                elif kind_cookie == "bb":
+                    fn = getattr(sim, "optimize_black_barley_cycle", None)
+                    best = fn(
+                        seaz_name=st.session_state.seaz,
+                        party=st.session_state.party,
+                        step=STEP_FIXED,
+                        progress_cb=cb,
+                        equip_override=equip_override_local,
+                    )
+                    best_kind = "bb"
 
                 elif kind_cookie == "isle":
                     best = sim.optimize_isle_cycle(
@@ -1252,7 +1316,7 @@ with st.container(key="outer_shell", border=False):
             if not best:
                 st.caption("설정 후 실행하면 결과가 표시됩니다.")
             else:
-                if kind in ("wind", "melan"):
+                if kind in ("wind", "melan", "bb"):
                     c1, c2, c3 = st.columns(3, gap="small")
                     c1.metric("DPS", f"{best.get('dps', 0):,.4f}")
                     c2.metric("1사이클 시간(s)", f"{best.get('cycle_total_time', 0):,.4f}")
@@ -1267,7 +1331,7 @@ with st.container(key="outer_shell", border=False):
                 else:
                     pass
 
-                if kind in ("wind", "melan", "isle"):
+                if kind in ("wind", "melan", "bb", "isle"):
                     tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
                 else:
                     tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
@@ -1282,7 +1346,7 @@ with st.container(key="outer_shell", border=False):
                                 rows.append({"항목": k, "값": v})
 
                         rows = []
-                        if kind in ("wind", "melan"):
+                        if kind in ("wind", "melan", "bb"):
                             add(rows, "장비 선택 모드", st.session_state.mode) 
                             add(rows, "쿠키", best.get("cookie", ""))
                             add(rows, "장비", best.get("equip", ""))
@@ -1305,7 +1369,7 @@ with st.container(key="outer_shell", border=False):
 
                     setting_df = make_setting_df(best, kind)
 
-                    if kind in ("wind", "melan"):
+                    if kind in ("wind", "melan", "bb"):
                         p_df = pretty_potentials(best.get("potentials", {}))
                         s_df = pretty_shards(best.get("shards", {}))
                     elif kind in ("isle"):
@@ -1324,7 +1388,7 @@ with st.container(key="outer_shell", border=False):
                     """
                     st.markdown(html, unsafe_allow_html=True)
 
-                if kind in ("wind", "melan", "isle"):
+                if kind in ("wind", "melan", "bb", "isle"):
                     with tab2:
                         stats = best.get("stats", {})
                         if not stats:
@@ -1337,7 +1401,7 @@ with st.container(key="outer_shell", border=False):
                             )
                             render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df)
 
-                if kind in ("wind", "melan","isle"):
+                if kind in ("wind", "melan", "bb", "isle"):
                     with tab3:
                         cb = best.get("cycle_breakdown", {})
                         df = cycle_breakdown_df(cb)
