@@ -120,6 +120,34 @@ def add(stats: Dict[str, float], bonus: Dict[str, float]):
     for k, v in bonus.items():
         add_stat(stats, k, float(v))
 
+def _clone_stats_for_loop(st: Dict[str, float]) -> Dict[str, float]:
+    """템플릿 stats를 루프에서 안전하게 쓰기 위한 얕은 복사(+set 복사)."""
+    s = dict(st)
+    # set은 공유되면 다음 반복에 영향 → 반드시 복사
+    if "_applied_party_buffs" in s:
+        s["_applied_party_buffs"] = set(s["_applied_party_buffs"])
+    if "_applied_enemy_debuffs" in s:
+        s["_applied_enemy_debuffs"] = set(s["_applied_enemy_debuffs"])
+    return s
+
+def _apply_shards_inplace(stats: Dict[str, float], shards: Dict[str, int]) -> None:
+    """shards 슬롯만 stats에 더한다(템플릿+shards 방식)."""
+    for k, slots in shards.items():
+        inc = SHARD_INC.get(k, 0.0)
+        if inc and slots:
+            stats[k] = stats.get(k, 0.0) + inc * slots
+
+EPS_CR = 1e-12
+
+def effective_crit_rate_raw(stats: Dict[str, float]) -> float:
+    """클램프 전 '실전 치확' = (crit_rate * 승급배율) + (버프치확)."""
+    promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
+    return (float(stats.get("crit_rate", 0.0)) * promo_cr_mult) + float(stats.get("buff_crit_rate_raw", 0.0))
+
+def is_crit_100(stats: Dict[str, float]) -> bool:
+    """실전 치확이 100% 이상인지."""
+    return effective_crit_rate_raw(stats) >= (1.0 - EPS_CR)
+
 # =====================================================
 # 잎새의 활강(Leaf Glide)
 # =====================================================
@@ -171,12 +199,14 @@ COOKIES = {
     "윈드파라거스 쿠키": "wind_paragus",
     "이슬맛 쿠키": "isle",
     "멜랑크림 쿠키": "melan_cream",
+    "흑보리맛 쿠키": "black_barley",
 }
 
 COOKIE_ELEMENT = {
     "윈드파라거스 쿠키": "wind",
     "이슬맛 쿠키": "water",
     "멜랑크림 쿠키": "dark",
+    "흑보리맛 쿠키": "earth",
 }
 
 # 윈파 표식(강화 표식)
@@ -186,24 +216,28 @@ COOKIE_TYPE = {
     "윈드파라거스 쿠키": "magic",
     "이슬맛 쿠키": "support",
     "멜랑크림 쿠키": "slash",
+    "흑보리맛 쿠키": "shoot",
 }
 
 COOKIE_ROLE = {
     "윈드파라거스 쿠키": "strike",
     "이슬맛 쿠키": "support",
     "멜랑크림 쿠키": "dps",
+    "흑보리맛 쿠키": "dps",
 }
 
 # 초당 타수(히트 수) — 아르곤(5타마다) 기대값 계산용
 COOKIE_HITS_PER_SEC = {
     "멜랑크림 쿠키": 3.0,
     "윈드파라거스 쿠키": 11.0 / 2.5,  # 4.4
+    "흑보리맛 쿠키": 1.0, 
 }
 
 # 유니크/오라 업타임 계산에 쓰는 "궁 쿨" (간단 모델)
 ULT_COOLDOWN = {
     "윈드파라거스 쿠키": 30.0,
     "멜랑크림 쿠키": 30.0,
+    "흑보리맛 쿠키": 30.0,
 }
 
 # =====================================================
@@ -318,7 +352,7 @@ HERB_GREEN_SUB      = {"buff_amp": 0.20}
 SEAZNITES = {
     "페퍼루비:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": PEPPER_RUBY_SUB},
     "페퍼루비:듬직한 격투가":   {"passive": {"special_dmg": 0.30, "ult_dmg": 0.30}, "sub": PEPPER_RUBY_SUB},
-    "페퍼루비:사냥꾼의 본능":   {"passive": {"final_dmg_stack": 0.05, "max_stacks": 6}, "sub": PEPPER_RUBY_SUB},
+    "페퍼루비:사냥꾼의 본능":   {"passive": {"final_dmg_stack": 0.00, "max_stacks": 0}, "sub": PEPPER_RUBY_SUB},
     "페퍼루비:위대한 통치자":   {"passive": {"ult_dmg": 0.60}, "sub": PEPPER_RUBY_SUB},
     "페퍼루비:거침없는 습격자": {"passive": {"special_dmg": 0.40, "ult_dmg": 0.20}, "sub": PEPPER_RUBY_SUB},
     "페퍼루비:영예로운 기사도": {"passive": {"basic_dmg": 0.40, "special_dmg": 0.20}, "sub": PEPPER_RUBY_SUB},
@@ -327,7 +361,7 @@ SEAZNITES = {
 
     "리치코랄:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": RICH_CORAL_SUB},
 
-    "바닐라몬드:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.0, "element_strike_dmg": 0.0}, "sub": VANILLA_MONDE_SUB},
+    "바닐라몬드:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:듬직한 격투가":   {"passive": {"special_dmg": 0.30, "ult_dmg": 0.30}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:사냥꾼의 본능":   {"passive": {"final_dmg_stack": 0.00, "max_stacks": 0}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:위대한 통치자":   {"passive": {"ult_dmg": 0.60}, "sub": VANILLA_MONDE_SUB},
@@ -387,6 +421,21 @@ ARTIFACTS = {
             "all_elem_dmg": 0.30,
             "duration": 10.0,
         }
+    },
+
+    "품 속의 온기" : {
+        # 기본옵션: 공격력 35%
+        "base_stats": {"atk_pct": 0.35},
+        "unique_stats": {},
+        # 고유능력: 대지 속성 피해 30% 증가
+        "unique_buffs": {"all_elem_dmg": 0.30},
+        # 흑보리 전용 “커스텀 옵션”
+        # - 검은 보리탄 피해 +40%
+        # - 특수스킬 이후 다음 8회 평/강평 피해 +60%
+        "black_barley": {
+            "black_bullet_dmg": 0.40,
+            "next8_shot_dmg": 0.60,
+        }
     }
 }
 
@@ -429,6 +478,17 @@ def apply_artifact(stats: Dict[str, float], artifact_name: str):
         stats["dmg_bonus"] += float(ub["dmg_bonus"]) * buff_scale
     if "final_dmg" in ub:
         stats["final_dmg"] += float(ub["final_dmg"]) * buff_scale
+
+    # 흑보리 전용(품 속의 온기)
+    meta_bb = a.get("black_barley", None)
+    if meta_bb:
+        stats.setdefault("_bb_black_bullet_dmg_bonus_raw", 0.0)
+        stats.setdefault("_bb_next8_shot_dmg_bonus_raw", 0.0)
+
+        if "black_bullet_dmg" in meta_bb:
+            stats["_bb_black_bullet_dmg_bonus_raw"] += float(meta_bb["black_bullet_dmg"]) * buff_scale
+        if "next8_shot_dmg" in meta_bb:
+            stats["_bb_next8_shot_dmg_bonus_raw"] += float(meta_bb["next8_shot_dmg"]) * buff_scale
 
 # =====================================================
 # 7) 공통: 유니크 설탕유리조각
@@ -998,6 +1058,10 @@ def build_stats_for_combo(
 
         "unique_extra_coeff": 0.0,
 
+        # 흑보리(품 속의 온기)
+        "_bb_black_bullet_dmg_bonus_raw": 0.0,
+        "_bb_next8_shot_dmg_bonus_raw": 0.0,
+
         "sugar_set_enabled": 0.0,
         "sugar_set_proc_chance": 0.0,
         "sugar_set_proc_coeff": 0.0,
@@ -1032,6 +1096,24 @@ def build_stats_for_combo(
 
         stats["final_dmg"] += WIND_PROMO_FINAL_DMG_ADD
         stats["_wind_promo"] = 1.0
+    
+    if cookie_name_kr == "흑보리맛 쿠키" and BLACK_BARLEY_PROMO_ENABLED:
+        # 승급: 치확 +10%
+        stats["crit_rate"] += 0.10
+
+        # 승급: 공격력/방어력/HP 8% 증가 (딜에는 atk만 반영)
+        stats["base_atk"] *= 1.08
+        stats["def_pct"] = float(stats.get("def_pct", 0.0)) + 0.08
+        stats["hp_pct"]  = float(stats.get("hp_pct", 0.0))  + 0.08
+
+        # 승급: 특/궁 피해 +20%
+        stats["special_dmg"] += 0.20
+        stats["ult_dmg"]     += 0.20
+
+        # 승급: 기본/강화 기본공격 피해 +30%
+        stats["basic_dmg"] += 0.30
+
+        stats["_bb_promo"] = 1.0
 
     # --- 장비에서 들어오는 atk_pct(공퍼/공증%)만 출처 기록 ---
 
@@ -1101,15 +1183,19 @@ def is_valid_by_caps(stats: Dict[str, float]) -> bool:
     eff_cr = stats["crit_rate"] * promo_cr_mult
     eff_ap = stats["armor_pen"] * promo_ap_mult
 
-    if eff_cr > 1.0 + 1e-12:
-        return False
     if eff_ap > 0.80 + 1e-12:
         return False
     return True
 
 # =====================================================
-# (A) 윈드파라거스
+# (A) 윈드파라거스 (치확 100% 고정 버전) 설유 crit_rate 자동배정
+#  - 최적화에서는 "유효 치확 = 100%"로 강제
+#  - 후보 폭발 줄이기 위해 shards에서 crit_rate 축 제거
+#  - crit_rate는 후보로 돌리지 않고, 필요한 만큼 설유 슬롯을 자동 배정해서 100% 맞춤
 # =====================================================
+
+import math
+from typing import Dict, List, Tuple, Optional, Callable, Union
 
 # [윈드파라거스] 승급 효과
 WIND_PROMO_ENABLED = True
@@ -1118,6 +1204,9 @@ WIND_PROMO_ATK_PCT_ADD   = 0.10
 WIND_PROMO_DEF_PCT_ADD   = 0.10
 WIND_PROMO_HP_PCT_ADD    = 0.10
 WIND_PROMO_FINAL_DMG_ADD = 0.05
+
+# 윈파도 치확 100% 강제
+WIND_FORCE_CRIT_100 = True
 
 BASE_STATS_WIND = {
     "윈드파라거스 쿠키": {
@@ -1150,12 +1239,12 @@ WIND_ALWAYS_EMPOWERED_CHARGE = True
 WIND_CYCLE_TOKENS = [
     "S", "U", "C",
     "B",
-    "ARGO1",   # 충성의 기류 1타(자동, 시간 0)
+    "ARGO1",
     "B",
-    "ARGO2",   # 충성의 기류 2타(자동, 시간 0)
+    "ARGO2",
     "B",
-    "ARGO3",   # 충성의 기류 3타(자동, 시간 0)
-    "S", "FW", # S 이후 자유로운 비상(자동, 시간 0) 같이 들어감
+    "ARGO3",
+    "S", "FW",
     "B",
     "C",
     "B", "B", "B",
@@ -1200,40 +1289,41 @@ def wind_allowed_artifacts() -> List[str]:
 def wind_allowed_seaz() -> List[str]:
     return ["페퍼루비:믿음직한 브리더", "리치코랄:믿음직한 브리더"]
 
-def wind_generate_shard_candidates(step: int = 7) -> List[Dict[str, int]]:
+# =====================================================
+# shards 후보: crit_rate 축 제거
+#    (crit_dmg / all_elem_dmg / basic_dmg / special_dmg / atk_pct)만 탐색
+#    crit_rate는 자동 배정, 남는 슬롯은 elem_atk로 자동 채움
+# =====================================================
+def wind_generate_shard_candidates_no_cr(step: int = 7) -> List[Dict[str, int]]:
     steps = list(range(0, NORMAL_SLOTS + 1, step))
     if steps[-1] != NORMAL_SLOTS:
         steps.append(NORMAL_SLOTS)
 
     candidates: List[Dict[str, int]] = []
-    for a in steps:
-        for b in steps:
-            for c in steps:
-                for d in steps:
-                    for e in steps:
-                        for f in steps:
-                            used = a + b + c + d + e + f
-                            if used > NORMAL_SLOTS:
-                                continue
-                            g = NORMAL_SLOTS - used
-                            candidates.append({
-                                "crit_rate": a,
-                                "crit_dmg": b,
-                                "all_elem_dmg": c,
-                                "basic_dmg": d,
-                                "special_dmg": e,
-                                "atk_pct": f,
-                                "elem_atk": g,
-                                "ult_dmg": 0,
-                                "passive_dmg": 0,
-                            })
+    for cd in steps:
+        for ae in steps:
+            for bd in steps:
+                for sd in steps:
+                    for ap in steps:
+                        used = cd + ae + bd + sd + ap
+                        if used > NORMAL_SLOTS:
+                            continue
+                        candidates.append({
+                            "crit_dmg": cd,
+                            "all_elem_dmg": ae,
+                            "basic_dmg": bd,
+                            "special_dmg": sd,
+                            "atk_pct": ap,
+                            # 고정 0축(호환용)
+                            "ult_dmg": 0,
+                            "passive_dmg": 0,
+                        })
     return candidates
 
 def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: str) -> Dict[str, float]:
     total_time = 0.0
     empowered_charge_count = 0
 
-    # 시간 계산: 플레이어 액션만 시간 증가, ARGO/FW는 시간 0
     for tok in WIND_CYCLE_TOKENS:
         if tok == "B":
             total_time += WIND_TIME["B"]
@@ -1243,12 +1333,9 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
             total_time += WIND_TIME["U"]
         elif tok == "C":
             total_time += WIND_TIME["C"]
-            # 에메랄딘 업타임 트리거(기존 로직 유지)
             if WIND_ALWAYS_EMPOWERED_CHARGE:
                 empowered_charge_count += 1
-        # ARGO/FW는 시간 0
 
-    # ---- 에메랄딘 업타임(기존 유지)
     emeraldin_bonus = 0.0
     if artifact_name == "이어지는 마음":
         em = ARTIFACTS[artifact_name].get("emeraldin", {})
@@ -1274,8 +1361,8 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         "special": 0.0,
         "ult": 0.0,
         "charge": 0.0,
-        "argo": 0.0,       # 추가(자동 충성)
-        "free_wing": 0.0,  # 추가(자동 비상)
+        "argo": 0.0,
+        "free_wing": 0.0,
         "strike": 0.0,
         "unique": 0.0
     }
@@ -1299,19 +1386,13 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         breakdown["ult"] += dmg
 
     def do_charge():
-        """
-        변경 포인트
-        - 기존: C에 FREE_WING를 얹어버렸는데, 이제 FW는 별도 자동타로 분리.
-        - 따라서 C는 '차징(플레이어)' 데미지로만 계산.
-        """
         nonlocal direct
-        coeff = WIND_CHARGE_COEFF   # 여기로 고정 (FREE_WING는 FW 토큰에서 처리)
+        coeff = WIND_CHARGE_COEFF
         dmg = unit * coeff * skill_bonus_mult(local_stats, "basic")
         direct += dmg
         breakdown["charge"] += dmg
 
     def do_argo(n: int):
-        """충성의 기류: 기본공격 피해 취급, 공격속도 영향 X(시간 0)."""
         nonlocal direct
         if n == 1:
             coeff = WIND_LOYALTY_1_COEFF
@@ -1323,17 +1404,15 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         dmg = unit * coeff * skill_bonus_mult(local_stats, "basic")
         direct += dmg
         breakdown["argo"] += dmg
-        breakdown["basic"] += dmg  # 기본공 피해 취급이므로 basic에도 합산(원치 않으면 제거)
+        breakdown["basic"] += dmg  # 기본공 피해 취급(원치 않으면 제거)
 
     def do_free_wing():
-        """자유로운 비상: 특수스킬 피해 취급, 시간 0."""
         nonlocal direct
         dmg = unit * WIND_FREE_WING_COEFF * skill_bonus_mult(local_stats, "special")
         direct += dmg
         breakdown["free_wing"] += dmg
-        breakdown["special"] += dmg  # 특수 피해 취급이므로 special에도 합산(원치 않으면 제거)
+        breakdown["special"] += dmg  # 특수 피해 취급(원치 않으면 제거)
 
-    # 실제 사이클 데미지
     for tok in WIND_CYCLE_TOKENS:
         if tok == "B":
             do_basic()
@@ -1371,7 +1450,6 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         "breakdown_ult": breakdown["ult"],
         "breakdown_charge": breakdown["charge"],
 
-        # 추가로 보고 싶으면 UI에 뿌리기 좋게 반환
         "breakdown_argo": breakdown["argo"],
         "breakdown_free_wing": breakdown["free_wing"],
 
@@ -1387,20 +1465,48 @@ def _resolve_equip_list_override(equip_override, default_equips):
     if equip_override is None:
         return base
 
-    # 리스트/튜플/셋 형태
     if isinstance(equip_override, (list, tuple, set)):
         cand = [str(x).strip() for x in equip_override if str(x).strip()]
     else:
         s = str(equip_override).strip()
         if not s or s.upper() in ("AUTO", "NONE"):
             return base
-        # 콤마로 여러 개 들어온 경우 지원
         cand = [x.strip() for x in s.split(",")] if "," in s else [s]
 
-    # 실제 존재하는 장비만 남김
     cand = [x for x in cand if x in EQUIP_SETS]
-
     return cand if cand else base
+
+# =====================================================
+# template(설유 0) 기준으로 "치확 100% 달성에 필요한 crit_rate 설유 슬롯" 최소값을 구함
+#    - is_crit_100 / is_valid_by_caps 를 그대로 사용해서, 내부 기준식 몰라도 안전
+# =====================================================
+def _min_crit_slots_needed_for_crit100_generic(template: Dict[str, float]) -> Optional[int]:
+    per_slot = float(SHARD_INC.get("crit_rate", 0.0))
+    if per_slot <= 0:
+        return 0 if is_crit_100(template) else None
+
+    if is_crit_100(template):
+        return 0
+
+    def ok(x: int) -> bool:
+        tmp = dict(template)
+        tmp["crit_rate"] = float(tmp.get("crit_rate", 0.0)) + per_slot * x
+        # caps까지 통과하는 "가능한" 해만 인정(초과치확 등)
+        if not is_valid_by_caps(tmp):
+            return False
+        return is_crit_100(tmp)
+
+    if not ok(NORMAL_SLOTS):
+        return None
+
+    lo, hi = 0, NORMAL_SLOTS
+    while lo < hi:
+        mid = (lo + hi) // 2
+        if ok(mid):
+            hi = mid
+        else:
+            lo = mid + 1
+    return lo
 
 def optimize_wind_cycle(
     seaz_name: str,
@@ -1417,7 +1523,25 @@ def optimize_wind_cycle(
     uniques = wind_allowed_uniques()
     potentials = wind_allowed_potentials()
     artifacts = wind_allowed_artifacts()
-    shard_candidates = wind_generate_shard_candidates(step=step)
+
+    # crit_rate 축 제거된 후보
+    shard_candidates = wind_generate_shard_candidates_no_cr(step=step)
+
+    # 후보에서 "0이 아닌 증가분"만 미리 캐싱 (+ used 슬롯 수)
+    shard_adds_list = []
+    for sh in shard_candidates:
+        adds = []
+        used = 0
+        for k, slots in sh.items():
+            if k in ("ult_dmg", "passive_dmg"):
+                continue
+            used += int(slots)
+            inc = SHARD_INC.get(k, 0.0)
+            if inc and slots:
+                adds.append((k, inc * slots))
+        shard_adds_list.append((sh, adds, used))
+
+    zero_shards = {k: 0 for k in SHARD_INC.keys()}
 
     total = max(1, len(equips) * len(artifacts) * len(uniques) * len(shard_candidates) * len(potentials))
     done = 0
@@ -1434,30 +1558,99 @@ def optimize_wind_cycle(
     _emit(0.0)
     best = None
 
+    cr_inc = float(SHARD_INC.get("crit_rate", 0.0))
+    ea_inc = float(SHARD_INC.get("elem_atk", 0.0))
+
     for equip in equips:
         for artifact_name in artifacts:
             for unique_name in uniques:
-                for shards in shard_candidates:
-                    for pot in potentials:
+                for pot in potentials:
+
+                    # template(설유 0) 먼저 만든 뒤, "필요 치확 설유 슬롯"을 계산
+                    template = build_stats_for_combo(
+                        cookie_name_kr=cookie,
+                        base=base,
+                        shards=zero_shards,
+                        potentials=pot,
+                        equip_name=equip,
+                        seaz_name=seaz_name,
+                        unique_name=unique_name,
+                        party=party,
+                        artifact_name=artifact_name,
+                    )
+
+                    # template 자체가 caps 불통이면 여기서 컷
+                    if not is_valid_by_caps(template):
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    if WIND_FORCE_CRIT_100:
+                        req_cr_slots = _min_crit_slots_needed_for_crit100_generic(template)
+                        if req_cr_slots is None:
+                            done += len(shard_candidates)
+                            if (done % tick) == 0:
+                                _emit(done / total)
+                            continue
+                    else:
+                        req_cr_slots = 0
+
+                    remain = NORMAL_SLOTS - int(req_cr_slots)
+                    if remain < 0:
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    # 중복 적용 방지 키 제거(속도)
+                    template.pop("_applied_party_buffs", None)
+                    template.pop("_applied_enemy_debuffs", None)
+
+                    for sh_base, adds, used in shard_adds_list:
                         done += 1
                         if (done % tick) == 0:
                             _emit(done / total)
 
-                        stats = build_stats_for_combo(
-                            cookie_name_kr=cookie,
-                            base=base,
-                            shards=shards,
-                            potentials=pot,
-                            equip_name=equip,
-                            seaz_name=seaz_name,
-                            unique_name=unique_name,
-                            party=party,
-                            artifact_name=artifact_name,
-                        )
+                        # 다른 축이 remain을 넘으면 불가
+                        if used > remain:
+                            continue
+
+                        ea_slots = remain - used  # 남는 슬롯은 elem_atk로
+
+                        stats = template.copy()
+
+                        # 후보 축 증가분 적용
+                        for k, dv in adds:
+                            stats[k] = stats.get(k, 0.0) + dv
+
+                        # 치확 설유 자동 배정
+                        if WIND_FORCE_CRIT_100 and req_cr_slots > 0 and cr_inc > 0:
+                            stats["crit_rate"] = stats.get("crit_rate", 0.0) + cr_inc * req_cr_slots
+
+                        # 남는 슬롯 elem_atk
+                        if ea_slots > 0 and ea_inc > 0:
+                            stats["elem_atk"] = stats.get("elem_atk", 0.0) + ea_inc * ea_slots
+
+                        # 최종 검증
                         if not is_valid_by_caps(stats):
+                            continue
+                        if WIND_FORCE_CRIT_100 and (not is_crit_100(stats)):
                             continue
 
                         cycle = wind_cycle_damage(stats, party, artifact_name)
+
+                        # 기록용 shards 구성(실제 배정까지 포함)
+                        shards_out = dict(sh_base)
+                        shards_out["crit_rate"] = int(req_cr_slots)
+                        shards_out["elem_atk"] = int(ea_slots)
+                        shards_out["all_elem_dmg"] = int(sh_base.get("all_elem_dmg", 0))
+                        shards_out["basic_dmg"] = int(sh_base.get("basic_dmg", 0))
+                        shards_out["special_dmg"] = int(sh_base.get("special_dmg", 0))
+                        shards_out["atk_pct"] = int(sh_base.get("atk_pct", 0))
+                        shards_out["crit_dmg"] = int(sh_base.get("crit_dmg", 0))
+                        shards_out["ult_dmg"] = 0
+                        shards_out["passive_dmg"] = 0
 
                         cur = {
                             "cookie": cookie,
@@ -1469,7 +1662,7 @@ def optimize_wind_cycle(
                             "seaz": seaz_name,
                             "unique": unique_name,
                             "artifact": artifact_name,
-                            "shards": shards,
+                            "shards": shards_out,
                             "potentials": pot,
                             "party": party,
                             "stats": stats,
@@ -1484,8 +1677,14 @@ def optimize_wind_cycle(
     return best
 
 # =====================================================
-# (B) 멜랑크림
+# (B) 멜랑크림  (치확 100% 고정 버전)
+#  - 최적화에서는 "실전 치확 = 100%"로 강제
+#  - 후보 폭발 줄이기 위해 potentials/shards에서 crit_rate 축 제거
+#  - 치확 100%는 "설탕유리조각(crit_rate 슬롯)"을 자동 배정해서 맞춤(템플릿 crit_rate 덮어쓰기 X)
 # =====================================================
+
+import math
+from typing import Dict, List, Tuple, Optional, Callable, Union
 
 MELAN_PROMO_ENABLED = True
 
@@ -1503,6 +1702,9 @@ MELAN_PRELUDE_COEFF = 5.0  # [최후의 전주곡] 500% = 5.0
 
 # 프리마 강화도 "곱"으로
 MELAN_PROMO_PRIMA_DMG_MULT = 1.25   # 프리마 피해 *1.25
+
+# 멜랑도 치확 100% 강제
+MELAN_FORCE_CRIT_100 = True
 
 BASE_STATS_MELAN = {
     "멜랑크림 쿠키": {
@@ -1542,157 +1744,93 @@ MELAN_CYCLE_TOKENS = [
 
 MELAN_TIME = {"B4": 1.20, "S": 1.5, "U": 4.23}
 
-def melan_allowed_equips() -> List[str]:
-    return ["달콤한 설탕 깃털복", "미지의 방랑자", "수상한 사냥꾼", "시간관리국의 제복"]
+# =========================
+# 멜랑크림 FAST: 사이클 고정 → 사전 합산
+# =========================
+MELAN_BASIC_NORMAL_SUM = sum(MELAN_BASIC_NORMAL)
+MELAN_BASIC_PRIMA_SUM  = sum(MELAN_BASIC_PRIMA)
 
-def melan_allowed_uniques() -> List[str]:
-    res = ["NONE"]
-    for name in UNIQUE_SHARDS.keys():
-        if name == "NONE":
-            continue
-        if is_unique_allowed("멜랑크림 쿠키", name):
-            res.append(name)
-    return res
-
-def melan_allowed_artifacts() -> List[str]:
-    return ["끝나지 않는 죽음의 밤"]
-
-def melan_generate_potentials_common() -> List[Dict[str, int]]:
-    TOTAL = 8
-    FIXED_ELEM = 2
-    FREE = TOTAL - FIXED_ELEM
-
-    keys = ["atk_pct", "crit_rate", "crit_dmg", "armor_pen"]
-    cap = {"armor_pen": min(4, FREE)}
-
-    res: List[Dict[str, int]] = []
-
-    def dfs(i: int, remain: int, cur: Dict[str, int]):
-        if i == len(keys):
-            if remain == 0:
-                out = dict(cur)
-                out["elem_atk"] = FIXED_ELEM
-                out["buff_amp"] = 0
-                out["debuff_amp"] = 0
-                res.append(out)
-            return
-
-        k = keys[i]
-        lim = remain
-        if k in cap:
-            lim = min(lim, cap[k])
-
-        for x in range(lim + 1):
-            cur[k] = x
-            dfs(i + 1, remain - x, cur)
-        cur.pop(k, None)
-
-    dfs(0, FREE, {})
-    return res
-
-def melan_generate_shard_candidates(step: int = 7) -> List[Dict[str, int]]:
-    steps = list(range(0, NORMAL_SLOTS + 1, step))
-    if steps[-1] != NORMAL_SLOTS:
-        steps.append(NORMAL_SLOTS)
-
-    candidates: List[Dict[str, int]] = []
-    for cr in steps:
-        for cd in steps:
-            for ae in steps:
-                for ap in steps:
-                    for bd in steps:
-                        for ud in steps:
-                            for pd in steps:
-                                used = cr + cd + ae + ap + bd + ud + pd
-                                if used > NORMAL_SLOTS:
-                                    continue
-                                ea = NORMAL_SLOTS - used
-                                candidates.append({
-                                    "crit_rate": cr,
-                                    "crit_dmg": cd,
-                                    "all_elem_dmg": ae,
-                                    "atk_pct": ap,
-                                    "basic_dmg": bd,
-                                    "ult_dmg": ud,
-                                    "passive_dmg": pd,
-                                    "elem_atk": ea,
-                                    "special_dmg": 0,
-                                })
-    return candidates
-
-def melan_damage_for_token(
-    stats: Dict[str, float],
-    token: str,
-    is_prima: bool,
-    is_transform_ult: bool
-) -> Tuple[float, float, bool, Dict[str, float]]:
-    unit = base_damage_only(stats)
-    b = {"basic": 0.0, "special": 0.0, "ult": 0.0, "passive": 0.0}
-
-    prima_mult = float(stats.get("promo_prima_dmg_mult", 1.0))
-
-    if token == "B4":
-        coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
-        mult_type = "passive" if is_prima else "basic"
-
-        dmg = 0.0
-        for c in coeffs:
-            hdmg = unit * c * skill_bonus_mult(stats, mult_type)
-
-            # 프리마 기본공은 프리마 강화 배율 적용(원하면 유지)
-            if is_prima:
-                hdmg *= prima_mult
-                b["passive"] += hdmg
-            else:
-                b["basic"] += hdmg
-
-            dmg += hdmg
-
-        return dmg, MELAN_TIME["B4"], is_prima, b
-
-    if token == "S":
-        if is_prima:
-            coeff = MELAN_SPECIAL_PRIMA_AS_PASSIVE_COEFF
-            dmg = unit * coeff * skill_bonus_mult(stats, "passive")
-            dmg *= prima_mult
-            b["passive"] += dmg
-            return dmg, MELAN_TIME["S"], is_prima, b
-        else:
-            coeff = MELAN_SPECIAL_NORMAL_COEFF
-            dmg = unit * coeff * skill_bonus_mult(stats, "special")
-            # 비(프리마) S에는 prima_mult 곱하지 않음
-            b["special"] += dmg
-            return dmg, MELAN_TIME["S"], is_prima, b
-
-    if token == "U":
-        # 프리마돈나 돌입 U에서는 최후의 전주곡 미적용
-        prelude = 0.0
-        if (not is_prima) and (not is_transform_ult):
-            prelude = unit * MELAN_PRELUDE_COEFF * skill_bonus_mult(stats, "ult")
-
-        if is_transform_ult:
-            # 프리마 돌입 피해(패시브 취급)만
-            entry = unit * PRIMA_ENTRY_COEFF * skill_bonus_mult(stats, "passive")
-            entry *= prima_mult 
-            dmg = entry
-            b["passive"] += entry
-            return dmg, MELAN_TIME["U"], True, b
-        else:
-            coeff = MELAN_ULT_NORMAL_COEFF
-            ult = unit * coeff * skill_bonus_mult(stats, "ult")
-
-            dmg = ult + prelude
-            b["ult"] += ult + prelude
-            return dmg, MELAN_TIME["U"], is_prima, b
-
-    return 0.0, 0.0, is_prima, b
-
-def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, float]:
-    total_direct = 0.0
-    total_time = 0.0
-
+def _melan_precompute_fast():
+    # 사이클을 1번만 시뮬레이션해서 "카운트/총시간/브레스 티어 발동 횟수"를 고정값으로 뽑음
     ult_count = 0
     is_prima = False
+    breath = 0.0
+    eps = 1e-12
+
+    counts = {
+        "b4_norm": 0,
+        "s_norm": 0,
+        "u_norm": 0,
+        "prelude": 0,      # (비프리마 & 비변신) U에서 전주곡 1회
+        "entry": 0,        # 변신 U(프리마 진입)
+        "b4_prima": 0,
+        "s_prima": 0,
+        "hits_pre_prima": 0,         # 설탕셋 proc 횟수(= 비프리마 B4 히트 수)
+        "tier_0p25": 0,
+        "tier_0p50": 0,
+        "tier_0p75": 0,
+        "total_time": 0.0,
+    }
+
+    def normalize_breath(x: float) -> float:
+        return 0.0 if x >= 1.0 - eps else x
+
+    for tok in MELAN_CYCLE_TOKENS:
+        if tok == "U":
+            counts["total_time"] += MELAN_TIME["U"]
+            ult_count += 1
+            is_transform = (ult_count == 2)
+
+            if (not is_prima) and (not is_transform):
+                counts["u_norm"] += 1
+                counts["prelude"] += 1
+            elif is_transform:
+                counts["entry"] += 1
+                is_prima = True
+                breath = 0.0
+
+        elif tok == "S":
+            counts["total_time"] += MELAN_TIME["S"]
+            if is_prima:
+                counts["s_prima"] += 1
+            else:
+                counts["s_norm"] += 1
+
+        elif tok == "B4":
+            counts["total_time"] += MELAN_TIME["B4"]
+            if is_prima:
+                counts["b4_prima"] += 1
+            else:
+                counts["b4_norm"] += 1
+                for _ in MELAN_BASIC_NORMAL:
+                    counts["hits_pre_prima"] += 1
+                    prev = breath
+                    new = prev + BREATH_GAIN_PER_BASIC_HIT
+
+                    for tier_key, tier in (("tier_0p25", 0.25), ("tier_0p50", 0.50), ("tier_0p75", 0.75)):
+                        if prev + eps < tier <= new + eps:
+                            counts[tier_key] += 1
+
+                    breath = normalize_breath(new)
+
+    return counts
+
+_MELAN_FAST = _melan_precompute_fast()
+
+
+def melan_cycle_damage_fast(stats: Dict[str, float], party: List[str]) -> Dict[str, float]:
+    unit = base_damage_only(stats)
+
+    basic_mult   = 1.0 + float(stats.get("basic_dmg", 0.0))
+    special_mult = 1.0 + float(stats.get("special_dmg", 0.0))
+    ult_mult     = 1.0 + float(stats.get("ult_dmg", 0.0))
+    passive_mult = 1.0 + float(stats.get("passive_dmg", 0.0))
+
+    promo_on   = (float(stats.get("_melan_promo", 0.0)) > 0.0)
+    prima_mult = float(stats.get("promo_prima_dmg_mult", 1.0))
+
+    c = _MELAN_FAST
+    total_time = float(c["total_time"])
 
     breakdown = {
         "basic": 0.0,
@@ -1704,114 +1842,87 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
         "unique": 0.0,
     }
 
-    breath = 0.0
-    eps = 1e-9
+    total_direct = 0.0
 
-    def passive_proc_damage(prev: float, new: float) -> float:
-        unit = base_damage_only(stats)
-        pdmg = 0.0
+    # ---- 비프리마(기본/특/궁)
+    if c["s_norm"]:
+        dmg = unit * MELAN_SPECIAL_NORMAL_COEFF * special_mult * c["s_norm"]
+        total_direct += dmg
+        breakdown["special"] += dmg
 
-        promo_on = (stats.get("_melan_promo", 0.0) > 0.0)
+    if c["b4_norm"]:
+        dmg = unit * MELAN_BASIC_NORMAL_SUM * basic_mult * c["b4_norm"]
+        total_direct += dmg
+        breakdown["basic"] += dmg
 
-        for tier in (0.25, 0.50, 0.75):
-            if prev + eps < tier <= new + eps:
-                coeff = PASSIVE_TIER_COEFF.get(tier, 0.0)
+    if c["u_norm"]:
+        dmg = unit * MELAN_ULT_NORMAL_COEFF * ult_mult * c["u_norm"]
+        total_direct += dmg
+        breakdown["ult"] += dmg
 
-                # 승급 효과: 전부 곱연산
-                tier_mult = 1.0
-                if promo_on:
-                    if tier == 0.25:
-                        # 25%: 언데드 쿠키 +1개
-                        tier_mult *= (1.0 + float(MELAN_PROMO_UNDEAD_EXTRA))
-                    elif tier == 0.50:
-                        # 50%: 멜랑노바 +2개
-                        tier_mult *= (1.0 + float(MELAN_PROMO_NOVA_EXTRA))
-                    elif tier == 0.75:
-                        # 75%: 종말의 도래 피해 100% 증가 => 2배
-                        if bool(MELAN_PROMO_APOCALYPSE_X2):
-                            tier_mult *= 2.0
+    if c["prelude"]:
+        dmg = unit * MELAN_PRELUDE_COEFF * ult_mult * c["prelude"]
+        total_direct += dmg
+        breakdown["ult"] += dmg
 
-                # 언데드/멜랑노바/종말 = 패시브 피해 배율 적용
-                pdmg += unit * coeff * tier_mult * skill_bonus_mult(stats, "passive")
+    # ---- 변신 진입(프리마 진입 피해)
+    if c["entry"]:
+        dmg = unit * PRIMA_ENTRY_COEFF * passive_mult * prima_mult * c["entry"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
 
-        return pdmg
+    # ---- 프리마(패시브 취급)
+    if c["s_prima"]:
+        dmg = unit * MELAN_SPECIAL_PRIMA_AS_PASSIVE_COEFF * passive_mult * prima_mult * c["s_prima"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
 
-    def normalize_breath(x: float) -> float:
-        return 0.0 if x >= 1.0 - eps else x
+    if c["b4_prima"]:
+        dmg = unit * MELAN_BASIC_PRIMA_SUM * passive_mult * prima_mult * c["b4_prima"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
 
-    for tok in MELAN_CYCLE_TOKENS:
-        if tok == "U":
-            ult_count += 1
-            is_transform = (ult_count == 2)
+    # ---- 브레스 티어 패시브 발동(비프리마 구간에서만)
+    def tier_mult(tier: float) -> float:
+        if not promo_on:
+            return 1.0
+        if tier == 0.25:
+            return 1.0 + float(MELAN_PROMO_UNDEAD_EXTRA)
+        if tier == 0.50:
+            return 1.0 + float(MELAN_PROMO_NOVA_EXTRA)
+        if tier == 0.75:
+            return 2.0 if bool(MELAN_PROMO_APOCALYPSE_X2) else 1.0
+        return 1.0
 
-            prev_prima = is_prima
-            dmg, t, next_prima, b = melan_damage_for_token(stats, tok, is_prima, is_transform)
+    if c["tier_0p25"]:
+        dmg = unit * PASSIVE_TIER_COEFF[0.25] * tier_mult(0.25) * passive_mult * c["tier_0p25"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
+    if c["tier_0p50"]:
+        dmg = unit * PASSIVE_TIER_COEFF[0.50] * tier_mult(0.50) * passive_mult * c["tier_0p50"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
+    if c["tier_0p75"]:
+        dmg = unit * PASSIVE_TIER_COEFF[0.75] * tier_mult(0.75) * passive_mult * c["tier_0p75"]
+        total_direct += dmg
+        breakdown["passive"] += dmg
 
-            total_direct += dmg
-            total_time += t
+    # ---- 설탕셋 proc (비프리마 B4 히트마다 EV)
+    if float(stats.get("sugar_set_enabled", 0.0)) > 0.0 and c["hits_pre_prima"] > 0:
+        proc = (
+            unit
+            * float(stats.get("sugar_set_proc_coeff", 0.0))
+            * float(stats.get("sugar_set_proc_chance", 0.0))
+            * c["hits_pre_prima"]
+        )
+        total_direct += proc
+        breakdown["proc"] += proc
 
-            breakdown["ult"] += b["ult"]
-            breakdown["passive"] += b["passive"]
-
-            if (not prev_prima) and next_prima:
-                breath = 0.0
-
-            is_prima = next_prima
-            continue
-
-        if tok == "S":
-            dmg, t, is_prima, b = melan_damage_for_token(stats, tok, is_prima, False)
-            total_direct += dmg
-            total_time += t
-
-            breakdown["special"] += b["special"]
-            breakdown["passive"] += b["passive"]
-            continue
-
-        if tok == "B4":
-            unit = base_damage_only(stats)
-            coeffs = MELAN_BASIC_PRIMA if is_prima else MELAN_BASIC_NORMAL
-            total_time += MELAN_TIME["B4"]
-
-            #  프리마 기본공격 = 패시브 배율
-            mult_type = "passive" if is_prima else "basic"
-
-            for c in coeffs:
-                hdmg = unit * c * skill_bonus_mult(stats, mult_type)
-                total_direct += hdmg
-
-                if is_prima:
-                    breakdown["passive"] += hdmg
-                else:
-                    breakdown["basic"] += hdmg
-
-                # 프리마 상태면 숨결/티어패시브/설탕셋 proc 금지(기존 유지)
-                if is_prima:
-                    continue
-
-                prev = breath
-                new = prev + BREATH_GAIN_PER_BASIC_HIT
-
-                pdmg = passive_proc_damage(prev, new)
-                if pdmg > 0:
-                    total_direct += pdmg
-                    breakdown["passive"] += pdmg
-
-                breath = normalize_breath(new)
-
-                # 설탕셋 EV(기본공 적중마다 기대값 추가)
-                if stats.get("sugar_set_enabled", 0.0) > 0.0:
-                    proc = unit * stats.get("sugar_set_proc_coeff", 0.0) * stats.get("sugar_set_proc_chance", 0.0)
-                    total_direct += proc
-                    breakdown["proc"] += proc
-
-            continue
-
+    # ---- 속성강타 + 유니크(초당 추가딜)
     strike = strike_total_from_direct(total_direct, "멜랑크림 쿠키", stats, party)
     breakdown["strike"] = strike
 
-    unit = base_damage_only(stats)
-    unique_total = unit * stats.get("unique_extra_coeff", 0.0) * total_time
+    unique_total = unit * float(stats.get("unique_extra_coeff", 0.0)) * total_time
     breakdown["unique"] = unique_total
 
     total_damage = total_direct + strike + unique_total
@@ -1830,6 +1941,119 @@ def melan_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, f
         "breakdown_unique": breakdown["unique"],
     }
 
+
+def melan_allowed_equips() -> List[str]:
+    return ["달콤한 설탕 깃털복", "미지의 방랑자", "수상한 사냥꾼", "시간관리국의 제복"]
+
+def melan_allowed_uniques() -> List[str]:
+    res = ["NONE"]
+    for name in UNIQUE_SHARDS.keys():
+        if name == "NONE":
+            continue
+        if is_unique_allowed("멜랑크림 쿠키", name):
+            res.append(name)
+    return res
+
+def melan_allowed_artifacts() -> List[str]:
+    return ["끝나지 않는 죽음의 밤"]
+
+
+# =====================================================
+# (1) potentials: crit_rate 축 제거
+# =====================================================
+def melan_generate_potentials_common() -> List[Dict[str, int]]:
+    """
+    기본 8칸, elem_atk 2칸 고정(FREE=6)
+    치확 100% 강제면 crit_rate 축 제거
+    """
+    TOTAL = 8
+    FIXED_ELEM = 2
+    FREE = TOTAL - FIXED_ELEM
+
+    keys = ["atk_pct", "crit_dmg", "armor_pen"]  # crit_rate 제거
+    cap = {"armor_pen": min(4, FREE)}
+
+    res: List[Dict[str, int]] = []
+
+    def dfs(i: int, remain: int, cur: Dict[str, int]):
+        if i == len(keys):
+            if remain == 0:
+                out = dict(cur)
+                out["elem_atk"] = FIXED_ELEM
+                out["buff_amp"] = 0
+                out["debuff_amp"] = 0
+                # (crit_rate 키 자체를 넣을 필요는 없지만, 안전하게 0으로 명시)
+                out["crit_rate"] = 0
+                res.append(out)
+            return
+
+        k = keys[i]
+        lim = min(remain, cap.get(k, remain))
+
+        for x in range(lim + 1):
+            cur[k] = x
+            dfs(i + 1, remain - x, cur)
+        cur.pop(k, None)
+
+    dfs(0, FREE, {})
+    return res
+
+
+# =====================================================
+# (2) shards: crit_rate 축 제거 (cd/ae/ap/bd/ud/pd만 탐색)
+#     - crit_rate는 template마다 필요한 만큼 "자동 배정"
+#     - 남는 슬롯은 elem_atk로 자동 배정
+# =====================================================
+def melan_generate_shard_candidates_no_cr(step: int = 7) -> List[Dict[str, int]]:
+    steps = list(range(0, NORMAL_SLOTS + 1, step))
+    if steps[-1] != NORMAL_SLOTS:
+        steps.append(NORMAL_SLOTS)
+
+    candidates: List[Dict[str, int]] = []
+    for cd in steps:
+        for ae in steps:
+            for ap in steps:
+                for bd in steps:
+                    for ud in steps:
+                        for pd in steps:
+                            used = cd + ae + ap + bd + ud + pd
+                            if used > NORMAL_SLOTS:
+                                continue
+                            candidates.append({
+                                "crit_dmg": cd,
+                                "all_elem_dmg": ae,
+                                "atk_pct": ap,
+                                "basic_dmg": bd,
+                                "ult_dmg": ud,
+                                "passive_dmg": pd,
+                                # crit_rate / elem_atk 은 optimize에서 채움
+                                "special_dmg": 0,
+                            })
+    return candidates
+
+
+def _min_crit_slots_needed_for_crit100(template: Dict[str, float]) -> int:
+    """
+    template(= shards 0 상태)에서,
+    설유 crit_rate(1칸 = SHARD_INC['crit_rate'])로 "실전 치확 100%"를 만들기 위한 최소 슬롯 수.
+
+    기준:
+      (crit_rate_total) * promo_crit_rate_mult + buff_crit_rate_raw >= 1.0
+    여기서 crit_rate_total = template['crit_rate'] + (slots * inc)
+    """
+    promo = float(template.get("promo_crit_rate_mult", 1.0))
+    buff_cr = float(template.get("buff_crit_rate_raw", 0.0))
+    base_cr = float(template.get("crit_rate", 0.0))
+
+    # x >= ((1 - buff_cr)/promo - base_cr)
+    need = (1.0 - buff_cr) / max(promo, 1e-12) - base_cr
+    if need <= 0:
+        return 0
+
+    per_slot = float(SHARD_INC.get("crit_rate", 0.048))
+    return int(math.ceil(need / max(per_slot, 1e-12)))
+
+
 def optimize_melan_cycle(
     seaz_name: str,
     party: List[str],
@@ -1841,18 +2065,36 @@ def optimize_melan_cycle(
     base = BASE_STATS_MELAN[cookie].copy()
 
     equips = melan_allowed_equips()
-    if equip_override and str(equip_override).strip():
-        equips = [str(equip_override).strip()]
+    if equip_override:
+        if isinstance(equip_override, (list, tuple, set)):
+            equips = [x for x in map(str, equip_override) if x in EQUIP_SETS]
+        else:
+            s = str(equip_override).strip()
+            if s and s in EQUIP_SETS:
+                equips = [s]
 
     uniques = melan_allowed_uniques()
     potentials = melan_generate_potentials_common()
     artifacts = melan_allowed_artifacts()
-    shard_candidates = melan_generate_shard_candidates(step=step)
 
-    total = max(
-        1,
-        len(equips) * len(artifacts) * len(uniques) * len(shard_candidates) * len(potentials)
-    )
+    # crit_rate 축 제거된 후보
+    shard_candidates = melan_generate_shard_candidates_no_cr(step=step)
+
+    # 후보에서 "0이 아닌 증가분"만 미리 캐싱 (+ used 슬롯 수)
+    shard_adds_list = []
+    for sh in shard_candidates:
+        adds = []
+        used = 0
+        for k, slots in sh.items():
+            used += int(slots)
+            inc = SHARD_INC.get(k, 0.0)
+            if inc and slots:
+                adds.append((k, inc * slots))
+        shard_adds_list.append((sh, adds, used))
+
+    zero_shards = {k: 0 for k in SHARD_INC.keys()}
+
+    total = max(1, len(equips) * len(artifacts) * len(uniques) * len(potentials) * len(shard_candidates))
     done = 0
     tick = max(1, total // 250)
 
@@ -1866,52 +2108,117 @@ def optimize_melan_cycle(
 
     _emit(0.0)
     best = None
+    eps = 1e-12
 
     for equip in equips:
         for artifact_name in artifacts:
             for unique_name in uniques:
-                for shards in shard_candidates:
-                    for pot in potentials:
+                for pot in potentials:
+
+                    template = build_stats_for_combo(
+                        cookie_name_kr=cookie,
+                        base=base,
+                        shards=zero_shards,
+                        potentials=pot,
+                        equip_name=equip,
+                        seaz_name=seaz_name,
+                        unique_name=unique_name,
+                        party=party,
+                        artifact_name=artifact_name,
+                    )
+
+                    if not is_valid_by_caps(template):
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    # 치확 100% 강제면, "이미 100% 초과"는 줄일 방법이 없으니 스킵
+                    promo = float(template.get("promo_crit_rate_mult", 1.0))
+                    buff_cr = float(template.get("buff_crit_rate_raw", 0.0))
+                    base_cr = float(template.get("crit_rate", 0.0))
+                    eff_cr = base_cr * promo + buff_cr
+                    if MELAN_FORCE_CRIT_100 and (eff_cr > 1.0 + eps):
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    # template 기준으로 필요한 crit_rate 슬롯 계산
+                    if MELAN_FORCE_CRIT_100:
+                        req_cr_slots = _min_crit_slots_needed_for_crit100(template)
+                        if req_cr_slots > NORMAL_SLOTS:
+                            done += len(shard_candidates)
+                            if (done % tick) == 0:
+                                _emit(done / total)
+                            continue
+                    else:
+                        req_cr_slots = 0
+
+                    # 중복방지 set 제거
+                    template.pop("_applied_party_buffs", None)
+                    template.pop("_applied_enemy_debuffs", None)
+
+                    cr_inc = float(SHARD_INC.get("crit_rate", 0.0))
+                    ea_inc = float(SHARD_INC.get("elem_atk", 0.0))
+
+                    for sh_base, adds, used in shard_adds_list:
                         done += 1
                         if (done % tick) == 0:
                             _emit(done / total)
 
-                        stats = build_stats_for_combo(
-                            cookie_name_kr=cookie,
-                            base=base,
-                            shards=shards,
-                            potentials=pot,
-                            equip_name=equip,
-                            seaz_name=seaz_name,
-                            unique_name=unique_name,
-                            party=party,
-                            artifact_name=artifact_name,
-                        )
-                        if not is_valid_by_caps(stats):
+                        # 나머지 축 used는 "남는 슬롯(NORMAL_SLOTS - req_cr_slots)" 안에서만 가능
+                        if used > (NORMAL_SLOTS - req_cr_slots):
                             continue
 
-                        cycle = melan_cycle_damage(stats, party)
+                        # 남는 슬롯은 elem_atk로 채움
+                        ea_slots = NORMAL_SLOTS - req_cr_slots - used
+                        if ea_slots < 0:
+                            continue
 
-                        cur = {
-                            "cookie": cookie,
-                            "dps": cycle["dps"],
-                            "cycle_total_damage": cycle["total_damage"],
-                            "cycle_total_time": cycle["total_time"],
-                            "cycle_breakdown": cycle,
-                            "equip": equip,
-                            "seaz": seaz_name,
-                            "unique": unique_name,
-                            "artifact": artifact_name,
-                            "shards": shards,
-                            "potentials": pot,
-                            "party": party,
-                            "stats": stats,
-                            "buff_amp_total": stats.get("buff_amp_total", stats.get("buff_amp", 0.0)),
-                            "debuff_amp_total": stats.get("debuff_amp_total", stats.get("debuff_amp", 0.0)),
-                        }
+                        stats = template.copy()
 
-                        if best is None or cur["dps"] > best["dps"]:
-                            best = cur
+                        # 후보 축 증가분 적용
+                        for k, dv in adds:
+                            stats[k] = stats.get(k, 0.0) + dv
+
+                        # crit_rate/elem_atk 자동 배정
+                        if MELAN_FORCE_CRIT_100 and req_cr_slots > 0 and cr_inc > 0:
+                            stats["crit_rate"] = stats.get("crit_rate", 0.0) + (cr_inc * req_cr_slots)
+
+                        if ea_slots > 0 and ea_inc > 0:
+                            stats["elem_atk"] = stats.get("elem_atk", 0.0) + (ea_inc * ea_slots)
+
+                        # 최종 치확 100% 검증(is_crit_100 기준 그대로)
+                        if MELAN_FORCE_CRIT_100 and (not is_crit_100(stats)):
+                            continue
+
+                        cycle = melan_cycle_damage_fast(stats, party)
+                        dps = cycle["dps"]
+
+                        if best is None or dps > best["dps"]:
+                            # 기록용 shards 구성(실제 배정까지 포함)
+                            shards_out = dict(sh_base)
+                            shards_out["crit_rate"] = int(req_cr_slots)
+                            shards_out["elem_atk"] = int(ea_slots)
+
+                            best = {
+                                "cookie": cookie,
+                                "dps": dps,
+                                "cycle_total_damage": cycle["total_damage"],
+                                "cycle_total_time": cycle["total_time"],
+                                "cycle_breakdown": cycle,
+                                "equip": equip,
+                                "seaz": seaz_name,
+                                "unique": unique_name,
+                                "artifact": artifact_name,
+                                "shards": shards_out,
+                                "potentials": pot,
+                                "party": party,
+                                "stats": stats,
+                                "buff_amp_total": stats.get("buff_amp_total", stats.get("buff_amp", 0.0)),
+                                "debuff_amp_total": stats.get("debuff_amp_total", stats.get("debuff_amp", 0.0)),
+                            }
 
     _emit(1.0)
     return best
@@ -2058,7 +2365,6 @@ def isle_generate_shard_candidates(target: str = "dps", step: int = 7) -> List[D
                             })
     return candidates
 
-
 def isle_calc_shield_from_stats(stats: Dict[str, float]) -> float:
     """
     최종공격력 = (base_atk + equip_atk_flat + base_elem_atk + elem_atk)
@@ -2089,7 +2395,6 @@ def isle_calc_shield_from_stats(stats: Dict[str, float]) -> float:
     shield = final_atk * (1.0 + shield_pct) * ISLE_SHIELD_BASE_MULT
     return shield
 
-
 def _isle_apply_passive_start_effect(base_stats: Dict[str, float]) -> Dict[str, float]:
     """
     전투 시작: 버프증폭의 50%만큼 치확 증가, 증가값 최대 60% 제한.
@@ -2099,7 +2404,6 @@ def _isle_apply_passive_start_effect(base_stats: Dict[str, float]) -> Dict[str, 
     add_cr = min(0.60, 0.50 * BA)
     st["buff_crit_rate_raw"] += add_cr
     return st
-
 
 def isle_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: str) -> Dict[str, float]:
     horizon = 30.0
@@ -2293,7 +2597,6 @@ def isle_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
         "breakdown_unique": breakdown["unique"],
     }
 
-
 def optimize_isle_cycle(
     seaz_name: str,
     party: List[str],
@@ -2409,6 +2712,495 @@ def optimize_isle_cycle(
                 best = cur
             elif abs(cur["max_shield"] - best["max_shield"]) <= 1e-9 and cur["dps"] > best["dps"]:
                 best = cur
+
+    _emit(1.0)
+    return best
+
+# =====================================================
+# (D) 흑보리맛 쿠키  (치확 100% 고정 버전)  설유 crit_rate 자동배정
+#  - 최적화에서는 "유효 치확 = 100%"로 강제
+#  - 후보 폭발 줄이기 위해 potentials/shards에서 crit_rate 축 제거
+#  - crit_rate는 template을 덮어쓰지 않고, 설탕유리조각(crit_rate 슬롯)을 필요한 만큼 자동 배정해서 100% 맞춤
+# =====================================================
+
+import math
+from typing import Dict, List, Tuple, Optional, Callable, Union
+
+BLACK_BARLEY_PROMO_ENABLED = True
+BLACK_BARLEY_FORCE_CRIT_100 = True
+
+BASE_STATS_BLACK_BARLEY = {
+    "흑보리맛 쿠키": {
+        "atk": 903.0 * 0.8,
+        "elem_atk": 0.0,
+        "atk_pct": 0.20,
+        "crit_rate": 0.25,
+        "crit_dmg": 1.50,
+        "armor_pen": 0.0,
+        "final_dmg": 0.34,
+    }
+}
+
+BB_TIME = {
+    "B": 1.0 / 1.1,   # 평
+    "E": 1.0 / 1.1,   # 강평
+    "S": 0.3,         # 특
+    "U": 2.8,         # 궁
+}
+
+BB_BASIC_COEFF   = 9.159
+BB_EMPOWER_COEFF = 10.295
+BB_SPECIAL_COEFF = 2.272 + (4.828 * 2.0)   # = 11.928
+BB_ULT_COEFF     = (10.721 * 2.0) + 11.928 # = 33.37
+
+BB_PASSIVE_ATK_PCT_ADD = 0.30
+
+BB_POISON_TAKEN_INC = 0.10
+BB_POISON_DUR = 15.0
+BB_POISON_EXTRA_COEFF = 1.90
+
+BB_PREY_DUR = 12.0
+BB_PREY_BASIC_EXTRA_COEFF = 1.55
+BB_PREY_EMPOWER_EXTRA_COEFF = 2.30
+BB_PREY_EXPLODE_COEFF = 3.75
+
+BB_CYCLE_TOKENS = ["S", "U", "S"] + (["E"] * 4) + (["S", "B", "B", "B", "E"] * 6)
+
+# =========================
+# 흑보리 FAST: 사이클 프리컴퓨트
+# =========================
+def _bb_precompute_fast_events():
+    events = []
+    t = 0.0
+
+    poison_until = -1.0
+    prey_until = -1.0
+    next8_left = 0
+    black_bullet_ammo = 0
+    last_prey_expire = -1.0
+
+    for tok in BB_CYCLE_TOKENS:
+        dt = float(BB_TIME.get(tok, 0.0))
+
+        action = tok
+        if tok == "B" and black_bullet_ammo > 0:
+            action = "E"
+            black_bullet_ammo -= 1
+        elif tok == "E" and black_bullet_ammo > 0:
+            black_bullet_ammo -= 1
+
+        poison_active = (t < poison_until)
+        prey_active = (t < prey_until)
+
+        if tok == "S":
+            events.append(("special", BB_SPECIAL_COEFF, poison_active, False, False))
+            poison_until = max(poison_until, t + BB_POISON_DUR)
+            events.append(("proc_special", (BB_POISON_EXTRA_COEFF * 2.0), True, False, False))
+            next8_left = 8
+
+        elif tok == "U":
+            events.append(("ult", BB_ULT_COEFF, poison_active, False, False))
+            prey_until = max(prey_until, t + BB_PREY_DUR)
+            last_prey_expire = prey_until
+            black_bullet_ammo = 4
+
+        elif action in ("B", "E"):
+            coeff = BB_BASIC_COEFF if action == "B" else BB_EMPOWER_COEFF
+            use_black_bonus = (action == "E")
+            use_next8_bonus = (next8_left > 0)
+
+            events.append(("basic", coeff, poison_active, use_black_bonus, use_next8_bonus))
+
+            if next8_left > 0:
+                next8_left -= 1
+
+            if prey_active:
+                extra_coeff = BB_PREY_BASIC_EXTRA_COEFF if action == "B" else BB_PREY_EMPOWER_EXTRA_COEFF
+                events.append(("proc_basic", extra_coeff, poison_active, False, False))
+
+        t += dt
+
+    total_time = t
+
+    if last_prey_expire > 0 and last_prey_expire <= total_time + 1e-9:
+        poison_at_expire = (last_prey_expire < poison_until)
+        events.append(("proc_basic", BB_PREY_EXPLODE_COEFF, poison_at_expire, False, False))
+
+    return events, total_time
+
+
+_BB_FAST_EVENTS, _BB_FAST_TOTAL_TIME = _bb_precompute_fast_events()
+
+
+def black_barley_cycle_damage_fast(stats: Dict[str, float], party: List[str], artifact_name: str) -> Dict[str, float]:
+    total_time = float(_BB_FAST_TOTAL_TIME)
+
+    base_st = dict(stats)
+    base_st["atk_pct"] = float(base_st.get("atk_pct", 0.0)) + BB_PASSIVE_ATK_PCT_ADD
+
+    bb_black_bonus = float(base_st.get("_bb_black_bullet_dmg_bonus_raw", 0.0))
+    bb_next8_bonus = float(base_st.get("_bb_next8_shot_dmg_bonus_raw", 0.0))
+
+    unit_no_poison = base_damage_only(base_st)
+
+    poison_st = dict(base_st)
+    poison_st["dmg_taken_inc"] = float(poison_st.get("dmg_taken_inc", 0.0)) + BB_POISON_TAKEN_INC
+    unit_poison = base_damage_only(poison_st)
+
+    basic_mult   = 1.0 + float(base_st.get("basic_dmg", 0.0))
+    special_mult = 1.0 + float(base_st.get("special_dmg", 0.0))
+    ult_mult     = 1.0 + float(base_st.get("ult_dmg", 0.0))
+
+    breakdown = {
+        "basic": 0.0,
+        "special": 0.0,
+        "ult": 0.0,
+        "proc": 0.0,
+        "strike": 0.0,
+        "unique": 0.0,
+    }
+
+    total_direct = 0.0
+
+    for kind, coeff, use_poison_unit, use_black_bonus, use_next8_bonus in _BB_FAST_EVENTS:
+        unit = unit_poison if use_poison_unit else unit_no_poison
+
+        if kind == "basic":
+            mult = basic_mult
+            if use_black_bonus:
+                mult *= (1.0 + bb_black_bonus)
+            if use_next8_bonus:
+                mult *= (1.0 + bb_next8_bonus)
+            dmg = unit * float(coeff) * mult
+            total_direct += dmg
+            breakdown["basic"] += dmg
+
+        elif kind == "special":
+            dmg = unit * float(coeff) * special_mult
+            total_direct += dmg
+            breakdown["special"] += dmg
+
+        elif kind == "ult":
+            dmg = unit * float(coeff) * ult_mult
+            total_direct += dmg
+            breakdown["ult"] += dmg
+
+        else:
+            if kind == "proc_special":
+                dmg = unit * float(coeff) * special_mult
+            else:
+                dmg = unit * float(coeff) * basic_mult
+            total_direct += dmg
+            breakdown["proc"] += dmg
+
+    strike = strike_total_from_direct(total_direct, "흑보리맛 쿠키", stats, party)
+    breakdown["strike"] = strike
+
+    unique_total = unit_no_poison * float(stats.get("unique_extra_coeff", 0.0)) * total_time
+    breakdown["unique"] = unique_total
+
+    total_damage = total_direct + strike + unique_total
+    dps = total_damage / total_time if total_time > 0 else 0.0
+
+    return {
+        "total_damage": total_damage,
+        "total_time": total_time,
+        "dps": dps,
+        "breakdown_basic": breakdown["basic"],
+        "breakdown_special": breakdown["special"],
+        "breakdown_ult": breakdown["ult"],
+        "breakdown_proc": breakdown["proc"],
+        "breakdown_strike": breakdown["strike"],
+        "breakdown_unique": breakdown["unique"],
+    }
+
+
+def black_barley_allowed_equips() -> List[str]:
+    return ["달콤한 설탕 깃털복", "미지의 방랑자", "수상한 사냥꾼", "시간관리국의 제복"]
+
+
+def black_barley_allowed_uniques() -> List[str]:
+    res = ["NONE"]
+    for name in UNIQUE_SHARDS.keys():
+        if name == "NONE":
+            continue
+        if is_unique_allowed("흑보리맛 쿠키", name):
+            res.append(name)
+    return res
+
+
+def black_barley_allowed_artifacts() -> List[str]:
+    return ["품 속의 온기"]
+
+
+def black_barley_generate_potentials_common() -> List[Dict[str, int]]:
+    """
+    기본 8칸, elem_atk 2칸 고정 (FREE=6)
+    치확 100% 고정이면 potentials에서 crit_rate 축 제거
+    """
+    TOTAL = 8
+    FIXED_ELEM = 2
+    FREE = TOTAL - FIXED_ELEM
+
+    keys = ["atk_pct", "crit_dmg", "armor_pen"]  # crit_rate 제거
+    cap = {"armor_pen": min(4, FREE)}
+
+    res: List[Dict[str, int]] = []
+
+    def dfs(i: int, remain: int, cur: Dict[str, int]):
+        if i == len(keys):
+            if remain == 0:
+                out = dict(cur)
+                out["elem_atk"] = FIXED_ELEM
+                out["buff_amp"] = 0
+                out["debuff_amp"] = 0
+                out["crit_rate"] = 0
+                res.append(out)
+            return
+
+        k = keys[i]
+        lim = min(remain, cap.get(k, remain))
+
+        for x in range(lim + 1):
+            cur[k] = x
+            dfs(i + 1, remain - x, cur)
+        cur.pop(k, None)
+
+    dfs(0, FREE, {})
+    return res
+
+
+# =====================================================
+# shards 후보: crit_rate 축 제거 (cd/ae/ap/bd/sd/ud만 탐색)
+#    crit_rate는 "필요 슬롯 수" 자동배정, 남는 슬롯은 elem_atk로 자동 채움
+# =====================================================
+def black_barley_generate_shard_candidates_no_cr(step: int = 7) -> List[Dict[str, int]]:
+    steps = list(range(0, NORMAL_SLOTS + 1, step))
+    if steps[-1] != NORMAL_SLOTS:
+        steps.append(NORMAL_SLOTS)
+
+    candidates: List[Dict[str, int]] = []
+    for cd in steps:
+        for ae in steps:
+            for ap in steps:
+                for bd in steps:
+                    for sd in steps:
+                        for ud in steps:
+                            used = cd + ae + ap + bd + sd + ud
+                            if used > NORMAL_SLOTS:
+                                continue
+                            candidates.append({
+                                "crit_dmg": cd,
+                                "all_elem_dmg": ae,
+                                "atk_pct": ap,
+                                "basic_dmg": bd,
+                                "special_dmg": sd,
+                                "ult_dmg": ud,
+                            })
+    return candidates
+
+
+def _min_crit_slots_needed_for_crit100(template: Dict[str, float]) -> int:
+    """
+    template(= shards 0 상태)에서,
+    설유 crit_rate(1칸 = SHARD_INC['crit_rate'])로 "실전 치확 100%"를 만들기 위한 최소 슬롯 수.
+
+    기준(멜랑과 동일):
+      (crit_rate_total) * promo_crit_rate_mult + buff_crit_rate_raw >= 1.0
+    """
+    promo = float(template.get("promo_crit_rate_mult", 1.0))
+    buff_cr = float(template.get("buff_crit_rate_raw", 0.0))
+    base_cr = float(template.get("crit_rate", 0.0))
+
+    need = (1.0 - buff_cr) / max(promo, 1e-12) - base_cr
+    if need <= 0:
+        return 0
+
+    per_slot = float(SHARD_INC.get("crit_rate", 0.048))
+    return int(math.ceil(need / max(per_slot, 1e-12)))
+
+
+def optimize_black_barley_cycle(
+    seaz_name: str,
+    party: List[str],
+    step: int = 7,
+    progress_cb: Optional[Callable[[float], None]] = None,
+    equip_override: Optional[Union[str, List[str]]] = None,
+) -> Optional[dict]:
+    cookie = "흑보리맛 쿠키"
+    base = BASE_STATS_BLACK_BARLEY[cookie].copy()
+
+    equips = black_barley_allowed_equips()
+    if equip_override:
+        if isinstance(equip_override, (list, tuple, set)):
+            equips = [x for x in map(str, equip_override) if x in EQUIP_SETS]
+        else:
+            s = str(equip_override).strip()
+            if s and s in EQUIP_SETS:
+                equips = [s]
+
+    uniques = black_barley_allowed_uniques()
+    potentials = black_barley_generate_potentials_common()
+    artifacts = black_barley_allowed_artifacts()
+
+    # crit_rate 축 제거된 후보
+    shard_candidates = black_barley_generate_shard_candidates_no_cr(step=step)
+
+    # 후보에서 "0이 아닌 증가분"만 미리 캐싱 (+ used 슬롯 수)
+    shard_adds_list = []
+    for sh in shard_candidates:
+        adds = []
+        used = 0
+        for k, slots in sh.items():
+            used += int(slots)
+            inc = SHARD_INC.get(k, 0.0)
+            if inc and slots:
+                adds.append((k, inc * slots))
+        shard_adds_list.append((sh, adds, used))
+
+    zero_shards = {k: 0 for k in SHARD_INC.keys()}
+
+    total = max(1, len(equips) * len(artifacts) * len(uniques) * len(potentials) * len(shard_candidates))
+    done = 0
+    tick = max(1, total // 250)
+
+    def _emit(p: float):
+        if progress_cb is None:
+            return
+        try:
+            progress_cb(p)
+        except Exception:
+            pass
+
+    _emit(0.0)
+    best = None
+    eps = 1e-12
+
+    for equip in equips:
+        for artifact_name in artifacts:
+            for unique_name in uniques:
+                for pot in potentials:
+
+                    template = build_stats_for_combo(
+                        cookie_name_kr=cookie,
+                        base=base,
+                        shards=zero_shards,
+                        potentials=pot,
+                        equip_name=equip,
+                        seaz_name=seaz_name,
+                        unique_name=unique_name,
+                        party=party,
+                        artifact_name=artifact_name,
+                    )
+
+                    # (A) 치확 100% 강제: template에서 "필요 crit_rate 슬롯 수"만 계산
+                    if BLACK_BARLEY_FORCE_CRIT_100:
+                        promo = float(template.get("promo_crit_rate_mult", 1.0))
+                        buff_cr = float(template.get("buff_crit_rate_raw", 0.0))
+                        base_cr = float(template.get("crit_rate", 0.0))
+                        eff_cr = base_cr * promo + buff_cr
+
+                        # 이미 100% 초과면 줄일 방법이 없으니 스킵
+                        if eff_cr > 1.0 + eps:
+                            done += len(shard_candidates)
+                            if (done % tick) == 0:
+                                _emit(done / total)
+                            continue
+
+                        req_cr_slots = _min_crit_slots_needed_for_crit100(template)
+                        if req_cr_slots > NORMAL_SLOTS:
+                            done += len(shard_candidates)
+                            if (done % tick) == 0:
+                                _emit(done / total)
+                            continue
+                    else:
+                        req_cr_slots = 0
+
+                    # 캡 체크(템플릿 기준)
+                    if not is_valid_by_caps(template):
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    # 중복 적용 방지 키 제거
+                    template.pop("_applied_party_buffs", None)
+                    template.pop("_applied_enemy_debuffs", None)
+
+                    promo_ap_mult = float(template.get("promo_armor_pen_mult", 1.0))
+                    base_ap = float(template.get("armor_pen", 0.0)) * promo_ap_mult
+
+                    # armor_pen은 shards로 변동 없음 -> 초과면 즉시 스킵
+                    if base_ap > 0.80 + 1e-12:
+                        done += len(shard_candidates)
+                        if (done % tick) == 0:
+                            _emit(done / total)
+                        continue
+
+                    cr_inc = float(SHARD_INC.get("crit_rate", 0.0))
+                    ea_inc = float(SHARD_INC.get("elem_atk", 0.0))
+
+                    for sh_base, adds, used in shard_adds_list:
+                        done += 1
+                        if (done % tick) == 0:
+                            _emit(done / total)
+
+                        # (B) 다른 축 used는 "남는 슬롯(NORMAL_SLOTS - req_cr_slots)" 안에서만 가능
+                        if used > (NORMAL_SLOTS - req_cr_slots):
+                            continue
+
+                        # 남는 슬롯은 elem_atk로 채움
+                        ea_slots = NORMAL_SLOTS - req_cr_slots - used
+                        if ea_slots < 0:
+                            continue
+
+                        stats = template.copy()
+
+                        # 후보 축 증가분 적용
+                        for k, dv in adds:
+                            stats[k] = stats.get(k, 0.0) + dv
+
+                        # crit_rate/elem_atk 자동 배정
+                        if BLACK_BARLEY_FORCE_CRIT_100 and req_cr_slots > 0 and cr_inc > 0:
+                            stats["crit_rate"] = stats.get("crit_rate", 0.0) + (cr_inc * req_cr_slots)
+
+                        if ea_slots > 0 and ea_inc > 0:
+                            stats["elem_atk"] = stats.get("elem_atk", 0.0) + (ea_inc * ea_slots)
+
+                        # 최종 치확 100% 검증(is_crit_100 기준 그대로)
+                        if BLACK_BARLEY_FORCE_CRIT_100 and (not is_crit_100(stats)):
+                            continue
+
+                        cycle = black_barley_cycle_damage_fast(stats, party, artifact_name)
+                        dps = cycle["dps"]
+
+                        if best is None or dps > best["dps"]:
+                            # 기록용 shards 구성(실제 배정까지 포함)
+                            shards_out = dict(sh_base)
+                            shards_out["crit_rate"] = int(req_cr_slots)
+                            shards_out["elem_atk"] = int(ea_slots)
+                            # 기존 포맷 호환용(표시/로그)
+                            shards_out["passive_dmg"] = 0
+                            shards_out["def_pct"] = 0
+                            shards_out["shield_pct"] = 0
+
+                            best = {
+                                "cookie": cookie,
+                                "dps": dps,
+                                "cycle_total_damage": cycle["total_damage"],
+                                "cycle_total_time": cycle["total_time"],
+                                "cycle_breakdown": cycle,
+                                "equip": equip,
+                                "seaz": seaz_name,
+                                "unique": unique_name,
+                                "artifact": artifact_name,
+                                "shards": shards_out,
+                                "potentials": pot,
+                                "party": party,
+                                "stats": stats,
+                                "buff_amp_total": stats.get("buff_amp_total", stats.get("buff_amp", 0.0)),
+                                "debuff_amp_total": stats.get("debuff_amp_total", stats.get("debuff_amp", 0.0)),
+                            }
 
     _emit(1.0)
     return best
