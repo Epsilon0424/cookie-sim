@@ -813,7 +813,9 @@ def apply_party_buffs(
     main_cookie_name: str,
     party_artifacts: Optional[Dict[str, str]] = None,  # [ADD] 파티 아티팩트 맵
 ):
+    # =====================================================
     # 0) 안전: 기본 키 세팅
+    # =====================================================
     stats.setdefault("buff_amp", 0.0)
     stats.setdefault("debuff_amp", 0.0)
 
@@ -831,54 +833,73 @@ def apply_party_buffs(
 
     applied = stats.setdefault("_applied_party_buffs", set())
 
-    def _apply_once(tag: str, fn):
+    def _apply_once(tag: str, fn: Callable[[], None]):
         if tag in applied:
             return
         fn()
         applied.add(tag)
 
+    # =====================================================
+    # 1) 파티 포함 여부
+    # =====================================================
     has_isle = ("이슬맛 쿠키" in party) or (main_cookie_name == "이슬맛 쿠키")
     has_wind = ("윈드파라거스 쿠키" in party) or (main_cookie_name == "윈드파라거스 쿠키")
     has_char = ("샬롯맛 쿠키" in party) or (main_cookie_name == "샬롯맛 쿠키")
 
-    # "파티 합계"가 있으면 그걸 우선 사용
+    # =====================================================
+    # 2) 버프/디버프 증폭 스케일
+    #   "파티 합계"가 있으면 그걸 우선 사용
+    # =====================================================
     BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
 
     buff_scale   = 1.0 + BA
-    debuff_scale = 1.0 + DA
+    debuff_scale = 1.0 + DA  # 현재 apply_party_buffs 내에선 안 쓰지만 남겨둠
 
+    # =====================================================
+    # 3) 쿠키별 파티 버프
+    # =====================================================
     def _apply_isle_buffs():
-        isle_is_main = (main_cookie_name == "이슬맛 쿠키")
-        if not isle_is_main:
-            u_cd = get_uptime("PARTY_ISLE_CRITDMG_0p56")
-            stats["buff_crit_dmg_raw"] += 0.56 * u_cd * buff_scale
+        # 이슬이 메인이면, 이슬 본인 최적화/빌더쪽에서 처리하는 걸 전제로 중복 방지
+        if main_cookie_name == "이슬맛 쿠키":
+            return
 
-            u_atk = get_uptime("PARTY_ISLE_ATK_0p224")
-            stats["buff_atk_pct_raw"] += 0.224 * u_atk * buff_scale
+        u_cd = float(get_uptime("PARTY_ISLE_CRITDMG_0p56"))
+        stats["buff_crit_dmg_raw"] += 0.56 * u_cd * buff_scale
+
+        u_atk = float(get_uptime("PARTY_ISLE_ATK_0p224"))
+        stats["buff_atk_pct_raw"] += 0.224 * u_atk * buff_scale
 
     def _apply_wind_party_effects():
-        u = get_uptime("PARTY_WIND_CRITDMG_0p40")
+        u = float(get_uptime("PARTY_WIND_CRITDMG_0p40"))
         stats["buff_crit_dmg_raw"] += 0.40 * u * buff_scale
 
     def _apply_charlotte_party_effects():
+        # 결속(최종공)
         u_bond = 1.0
         stats["final_atk_mult"] += 0.392 * u_bond * buff_scale
 
+        # 진혼곡(파티 속피)
         u_requiem = 1.0
         stats["buff_all_elem_dmg_raw"] += 0.25 * u_requiem * buff_scale
 
+        # 적 패시브 받피(+10%) 같은 류
         stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + 0.10
 
-    # [ADD] 샬롯 아티팩트(희미한 날갯짓) 오라 반영 (공허/유실/진혼)
+    # =====================================================
+    # 4) 샬롯 아티팩트 오라(희미한 날갯짓)
+    # =====================================================
     def _apply_charlotte_wings_artifact_aura():
-        # 메인이 샬롯이면, 샬롯 최적화 코드에서 이미 apply_charlotte_artifact_minimal()로 처리 → 중복 방지
+        # 메인이 샬롯이면, 샬롯 최적화 코드에서 이미 처리 → 중복 방지
         if main_cookie_name == "샬롯맛 쿠키":
             return
 
-        # party_artifacts 없으면 stats 내에 저장된 맵을 fallback로 사용 가능
+        # party_artifacts 없으면 stats 내 저장된 맵 fallback
         arti_map = party_artifacts or stats.get("party_artifacts") or {}
-        char_arti = arti_map.get("샬롯맛 쿠키", "")
+        try:
+            char_arti = str(arti_map.get("샬롯맛 쿠키", ""))
+        except Exception:
+            char_arti = ""
 
         if char_arti != "희미한 날갯짓":
             return
@@ -886,17 +907,51 @@ def apply_party_buffs(
         # 공허(+20%) / 유실(+10%) : 패시브 피해 배율
         stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) * 1.20 * 1.10
 
-        # 진혼(+25%) : 모든 속성피해 배율 (엔진에서 elem_dmg_mult를 쓰면 자동 반영)
+        # 진혼(+25%) : 모든 속성피해 배율
         stats["elem_dmg_mult"] = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
 
+    # =====================================================
+    # 5) [ADD] 파티원 시즈 패시브를 메인 stats에 합산
+    #    (요청한 고정 시즈)
+    # =====================================================
+    FIXED_PARTY_SEAZ: Dict[str, str] = {
+        "이슬맛 쿠키": "허브그린드:백마법사의 의지",
+        "샬롯맛 쿠키": "허브그린드:백마법사의 의지",
+        "윈드파라거스 쿠키": "페퍼루비:믿음직한 브리더",
+    }
+
+    def _apply_party_member_seaz(cookie_name: str):
+        # 메인이 해당 쿠키면 자기 시즈는 자기 빌더에서 처리하는 걸 전제로 중복 방지
+        if main_cookie_name == cookie_name:
+            return
+        if cookie_name not in (party or []):
+            return
+
+        seaz = FIXED_PARTY_SEAZ.get(cookie_name, "")
+        if not seaz:
+            return
+
+        # apply_seaz_passive 내부에서 buff_amp_total/party_buff_amp_total + uptime까지 처리
+        apply_seaz_passive(stats, seaz)
+
+    # =====================================================
+    # 6) 적용 순서
+    #    - 일반 파티버프 → 오라 → 파티원 시즈(버프성 키를 raw에 더함)
+    # =====================================================
     if has_char:
         _apply_once("PARTY_CHARLOTTE", _apply_charlotte_party_effects)
         _apply_once("PARTY_CHARLOTTE_WINGS_ARTI", _apply_charlotte_wings_artifact_aura)
 
     if has_isle:
         _apply_once("PARTY_ISLE", _apply_isle_buffs)
+
     if has_wind:
         _apply_once("PARTY_WIND", _apply_wind_party_effects)
+
+    # 파티원 시즈 패시브도 합산
+    _apply_once("PARTY_SEAZ_ISLE", lambda: _apply_party_member_seaz("이슬맛 쿠키"))
+    _apply_once("PARTY_SEAZ_CHARLOTTE", lambda: _apply_party_member_seaz("샬롯맛 쿠키"))
+    _apply_once("PARTY_SEAZ_WIND", lambda: _apply_party_member_seaz("윈드파라거스 쿠키"))
 
     return stats
 
