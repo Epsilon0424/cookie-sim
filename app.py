@@ -1503,7 +1503,7 @@ with st.container(key="outer_shell", border=False):
 
                         render_labeled_table(
                             "사이클 내 딜 기여도",
-                            df
+                            df,
                             small=False,
                             col_widths=(0.48, 0.32, 0.20),
                         )
