@@ -581,11 +581,19 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
 unsafe_allow_html=True,
 )
 
+import time
+import html as _html
+import streamlit as st
+import pandas as pd
+import cookie_simulator as sim
+
+
 # =====================================================
 # 유틸: 한글 매핑
 # =====================================================
 def _kr_or_key(mapping: dict, k: str) -> str:
     return mapping.get(k, k)
+
 
 # =====================================================
 # 파티 슬롯 selectbox 기본값 1회만 넣기
@@ -597,8 +605,10 @@ def init_once(key: str, value):
     st.session_state[key] = value
     st.session_state[flag] = True
 
+
 def norm_none(x: str) -> str:
     return "" if (x is None or x == "없음") else x
+
 
 # =====================================================
 # 유틸: DF -> HTML Table (n컬럼 지원, tooltip 포함)
@@ -608,6 +618,7 @@ def hide_breeder_when_not_wind(cookie_name: str, options: list[str]) -> list[str
     if cookie_name == "윈드파라거스 쿠키":
         return options
     return [x for x in options if "믿음직한 브리더" not in str(x)]
+
 
 def df_to_html_table(
     df: pd.DataFrame,
@@ -659,6 +670,7 @@ def df_to_html_table(
 </table>
 """.strip()
 
+
 def render_labeled_table(
     title: str,
     df: pd.DataFrame,
@@ -682,6 +694,7 @@ def render_labeled_table(
 
     st.markdown(html, unsafe_allow_html=True)
 
+
 # =====================================================
 # 최종스탯 grid 전용: HTML 생성/렌더
 # =====================================================
@@ -692,6 +705,7 @@ def labeled_table_html(title: str, df: pd.DataFrame, small: bool = False, col_ra
     else:
         body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
+
 
 def labeled_table_html_optional(
     title: str,
@@ -706,6 +720,7 @@ def labeled_table_html_optional(
     pill = f'<div class="stat-pill">{_html.escape(title)}</div>'
     body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
+
 
 def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
     items = []
@@ -725,6 +740,7 @@ def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_d
     html = "<div class='stat-grid'>" + "".join(items) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
+
 # =====================================================
 # 요약표(잠재/조각)
 # =====================================================
@@ -739,6 +755,7 @@ def pretty_potentials(pot: dict) -> pd.DataFrame:
             rows.append({"항목": _kr_or_key(getattr(sim, "POTENTIAL_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
 
+
 def pretty_shards(shards: dict) -> pd.DataFrame:
     rows = []
     for k, v in (shards or {}).items():
@@ -749,6 +766,7 @@ def pretty_shards(shards: dict) -> pd.DataFrame:
         if iv >= 1:
             rows.append({"항목": _kr_or_key(getattr(sim, "SHARD_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
+
 
 # =====================================================
 # 사이클 breakdown 표 (비율 포함)
@@ -787,6 +805,7 @@ def cycle_breakdown_df(cb: dict) -> pd.DataFrame:
         pct = fv / total * 100.0
         out.append({"항목": label, "딜": f"{fv:,.4f}", "비율(%)": f"{pct:.2f}"})
     return pd.DataFrame(out, columns=["항목", "딜", "비율(%)"])
+
 
 # =====================================================
 # 최종스탯 그룹 (0인 항목 제거)
@@ -827,11 +846,10 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
     EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
 
-    atk_pct_sum   = eff["atk_pct_sum"]        # 화면 표시용: 그냥 합(+)
-    atk_pct_equiv = eff["atk_pct_equiv"]      # 최종공 계산용: 실제 곱규칙을 등가(%)로 환산한 값
-    final_atk_add = eff["final_atk_mult_add"]
+    atk_pct_sum   = eff.get("atk_pct_sum", 0.0)         # 화면 표시용: 합(+)
+    atk_pct_equiv = eff.get("atk_pct_equiv", 0.0)       # 최종공 계산용: 등가(%)
+    final_atk_add = eff.get("final_atk_mult_add", 0.0)
 
-    # 최종 공격력(수치)은 “실제 배율”로 계산
     final_atk_input = (OA + EA) * (1.0 + atk_pct_equiv) * (1.0 + final_atk_add)
 
     atk_rows = []
@@ -843,7 +861,7 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     atk_df = pd.DataFrame(atk_rows, columns=["항목", "값"])
 
     # =========================
-    # 치명 (이미 합 표시 형태라 유지)
+    # 치명
     # =========================
     crit_rows = []
     add_if_nonzero(crit_rows, "치명타 확률", _fmt_pct(float(eff.get("eff_crit_rate", 0.0))), float(eff.get("eff_crit_rate", 0.0)))
@@ -864,11 +882,7 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     add_if_nonzero(common_rows, "표식 저항 감소", _fmt_pct(float(eff.get("eff_mark_res_reduction", 0.0))), float(eff.get("eff_mark_res_reduction", 0.0)))
 
     add_if_nonzero(common_rows, "피해량", _fmt_pct(float(eff.get("dmg_bonus", 0.0))), float(eff.get("dmg_bonus", 0.0)))
-
-    # 최종피해
     add_if_nonzero(common_rows, "최종 피해", _fmt_pct(float(eff.get("final_dmg_sum", 0.0))), float(eff.get("final_dmg_sum", 0.0)))
-
-    # 속성강타 피해 증가
     add_if_nonzero(common_rows, "속성강타 피해", _fmt_pct(float(eff.get("element_strike_dmg", 0.0))), float(eff.get("element_strike_dmg", 0.0)))
 
     common_df = pd.DataFrame(common_rows, columns=["항목", "값"])
@@ -895,14 +909,12 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     # 버프/디버프 증폭
     # =========================
     def pick_num(*keys, default=0.0):
-        # 1) eff 우선
         for k in keys:
             if k in eff and eff.get(k) is not None:
                 try:
                     return float(eff.get(k))
                 except Exception:
                     pass
-        # 2) stats fallback
         for k in keys:
             if k in stats and stats.get(k) is not None:
                 try:
@@ -911,14 +923,8 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
                     pass
         return float(default)
 
-    buff_amp = pick_num(
-        "party_buff_amp_total",
-        "buff_amp_total"
-    )
-    debuff_amp = pick_num(
-        "party_debuff_amp_total",
-        "debuff_amp_total"
-    )
+    buff_amp = pick_num("party_buff_amp_total", "buff_amp_total")
+    debuff_amp = pick_num("party_debuff_amp_total", "debuff_amp_total")
 
     amp_rows = []
     add_if_nonzero(amp_rows, "버프 증폭", _fmt_pct(buff_amp), buff_amp)
@@ -927,14 +933,17 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
 
     return atk_df, crit_df, common_df, skill_df, surv_df, amp_df
 
+
 # =====================================================
 #  추가: 장비 선택 모드/장비 위젯 키 (쿠키별 분리)
 # =====================================================
 def mode_key(kind: str) -> str:
     return f"mode_widget__{kind}"
 
+
 def equip_key(kind: str) -> str:
     return f"equip_widget__{kind}"
+
 
 # =====================================================
 # 세션 상태 (쿠키별 widget key 분리)
@@ -952,7 +961,6 @@ if "best_kind" not in st.session_state:
 if "last_run" not in st.session_state:
     st.session_state.last_run = None
 
-#  추가: 장비 선택 모드/장비 저장용
 if "mode" not in st.session_state:
     st.session_state.mode = "최적(자동)"
 if "equip" not in st.session_state:
@@ -961,17 +969,28 @@ if "equip" not in st.session_state:
 if "_cookie_prev" not in st.session_state:
     st.session_state._cookie_prev = st.session_state.cookie
 
+
 def kind_of(cookie_name: str) -> str:
-    return {"윈드파라거스 쿠키": "wind", "멜랑크림 쿠키": "melan", "이슬맛 쿠키": "isle", "흑보리맛 쿠키": "bb",}.get(cookie_name, "melan")
+    return {
+        "윈드파라거스 쿠키": "wind",
+        "멜랑크림 쿠키": "melan",
+        "흑보리맛 쿠키": "bb",
+        "이슬맛 쿠키": "isle",
+        "샬롯맛 쿠키": "char",
+    }.get(cookie_name, "char")
+
 
 def seaz_key(kind: str) -> str:
     return f"seaz_widget__{kind}"
 
+
 def party1_key(kind: str) -> str:
     return f"party_slot1__{kind}"
 
+
 def party2_key(kind: str) -> str:
     return f"party_slot2__{kind}"
+
 
 # =====================================================
 # 상단 타이틀
@@ -983,12 +1002,12 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+
 # =====================================================
 # 레이아웃: 좌/우
 # =====================================================
 with st.container(key="outer_shell", border=False):
     left_col, right_col = st.columns([0.8, 2.4], gap="small")
-
 
     # =====================================================
     # 좌측: 선택
@@ -998,17 +1017,12 @@ with st.container(key="outer_shell", border=False):
             st.markdown('<div class="h-title">SELECT</div>', unsafe_allow_html=True)
 
             st.markdown('<div class="ctl-label">쿠키</div>', unsafe_allow_html=True)
-            cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "흑보리맛 쿠키", "이슬맛 쿠키"]
+            cookie_options = ["멜랑크림 쿠키", "윈드파라거스 쿠키", "흑보리맛 쿠키", "이슬맛 쿠키", "샬롯맛 쿠키"]
 
             if "cookie_widget" not in st.session_state:
                 st.session_state.cookie_widget = st.session_state.cookie
 
-            cookie = st.selectbox(
-                "쿠키",
-                cookie_options,
-                label_visibility="collapsed",
-                key="cookie_widget",
-            )
+            cookie = st.selectbox("쿠키", cookie_options, label_visibility="collapsed", key="cookie_widget")
 
             if cookie != st.session_state._cookie_prev:
                 st.session_state.cookie = cookie
@@ -1020,27 +1034,28 @@ with st.container(key="outer_shell", border=False):
                 st.session_state.best_kind = None
                 st.session_state.last_run = None
 
-                #  쿠키 바뀌면 장비 선택 모드/장비도 기본값으로 리셋
                 st.session_state.mode = "최적(자동)"
                 st.session_state.equip = ""
 
                 k2 = kind_of(cookie)
-
                 st.session_state[seaz_key(k2)] = ""
 
-                # kind별 파티 기본값
+                # kind별 파티 기본값 (역할 고정: 서폿1/스트1/딜러2)
+                # - 딜러(멜랑/흑보리): 서폿(이슬/샬롯) + 스트(윈드) 고정
+                # - 스트(윈드): 서폿(이슬/샬롯) 1명
+                # - 서폿(이슬/샬롯): 스트(윈드) 고정
                 if k2 in ("melan", "bb"):
-                    st.session_state[party1_key(k2)] = "이슬맛 쿠키"
-                    st.session_state[party2_key(k2)] = "윈드파라거스 쿠키"
+                    st.session_state[party1_key(k2)] = "샬롯맛 쿠키"        # 서폿(선택)
+                    st.session_state[party2_key(k2)] = "윈드파라거스 쿠키"  # 스트(고정)
                 elif k2 == "wind":
-                    st.session_state[party1_key(k2)] = "이슬맛 쿠키"
+                    st.session_state[party1_key(k2)] = "샬롯맛 쿠키"        # 서폿(선택)
                 elif k2 == "isle":
-                    st.session_state[party1_key(k2)] = "윈드파라거스 쿠키"
+                    st.session_state[party1_key(k2)] = "윈드파라거스 쿠키"  # 스트(고정)
+                elif k2 == "char":
+                    st.session_state[party1_key(k2)] = "윈드파라거스 쿠키"  # 스트(고정)
 
-                # 쿠키별 위젯 키도 리셋
                 st.session_state[mode_key(k2)] = "최적(자동)"
                 st.session_state[equip_key(k2)] = ""
-
                 st.rerun()
 
             k = kind_of(cookie)
@@ -1051,7 +1066,7 @@ with st.container(key="outer_shell", border=False):
             ek = equip_key(k)
 
             # =====================================================
-            #  추가: 장비 선택 모드(최적/선택)
+            # 장비 선택 모드
             # =====================================================
             st.markdown('<div class="ctl-label">장비 선택 모드</div>', unsafe_allow_html=True)
 
@@ -1063,55 +1078,79 @@ with st.container(key="outer_shell", border=False):
             st.session_state.mode = mode
 
             equip_override = None
-            if mode == "선택(수동)":
-                st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
 
-                # sim에 함수가 없을 수 있으니 안전하게 처리
-                if cookie == "윈드파라거스 쿠키":
-                    equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
-                elif cookie == "멜랑크림 쿠키":
-                    equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
-                elif cookie == "흑보리맛 쿠키":
-                    equip_options = (getattr(sim, "black_barley_allowed_equips", lambda: [""])() or [""])
-                else:
-                    equip_options = ["전설의 유령해적 세트"]
+            # 샬롯/이슬은 장비를 해적셋으로 고정
+            if cookie in ("이슬맛 쿠키", "샬롯맛 쿠키"):
+                fixed_opts = ["전설의 유령해적 세트"]
 
-                if st.session_state.get(ek, "") not in equip_options:
-                    st.session_state[ek] = equip_options[0]
+                if st.session_state.get(ek, "") not in fixed_opts:
+                    st.session_state[ek] = fixed_opts[0]
+                st.session_state.equip = fixed_opts[0]
+                equip_override = fixed_opts[0]
 
-                equip = st.selectbox("장비 선택", equip_options, label_visibility="collapsed", key=ek)
-                st.session_state.equip = equip
-                equip_override = equip
+                if mode == "선택(수동)":
+                    st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
+                    st.selectbox("장비 선택", fixed_opts, label_visibility="collapsed", key=ek, disabled=True)
+
             else:
-                st.session_state.equip = ""
-                equip_override = None
+                # 나머지는 기존 로직 그대로 (최적/선택 모드)
+                if mode == "선택(수동)":
+                    st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
+
+                    if cookie == "윈드파라거스 쿠키":
+                        equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
+                    elif cookie == "멜랑크림 쿠키":
+                        equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
+                    elif cookie == "흑보리맛 쿠키":
+                        equip_options = (getattr(sim, "black_barley_allowed_equips", lambda: [""])() or [""])
+                    else:
+                        pass
+
+                    if st.session_state.get(ek, "") not in equip_options:
+                        st.session_state[ek] = equip_options[0]
+
+                    equip = st.selectbox("장비 선택", equip_options, label_visibility="collapsed", key=ek)
+                    st.session_state.equip = equip
+                    equip_override = equip
+                else:
+                    st.session_state.equip = ""
+                    equip_override = None
 
             # =====================================================
-            # 기존: 시즈나이트/파티
+            # 시즈나이트/파티
             # =====================================================
             st.markdown('<div class="ctl-label">시즈나이트</div>', unsafe_allow_html=True)
 
+            # -------------------------
+            # 1) 윈드(스트)
+            # -------------------------
             if cookie == "윈드파라거스 쿠키":
-                seaz_options = sim.wind_allowed_seaz() or [""]
+                seaz_options = (getattr(sim, "wind_allowed_seaz", lambda: [""])() or [""])
+                seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [""]
+
                 if st.session_state.get(sk, "") not in seaz_options:
                     st.session_state[sk] = seaz_options[0]
 
                 seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
                 st.session_state.seaz = seaz
 
+                # 파티: 서폿 1명만 (이슬/샬롯)
                 st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
-                party_all = ["없음", "이슬맛 쿠키"]
-                init_once(p1k, "이슬맛 쿠키")
+                support_opts = ["이슬맛 쿠키", "샬롯맛 쿠키"]
+                init_once(p1k, "샬롯맛 쿠키")
+                if st.session_state.get(p1k, support_opts[0]) not in support_opts:
+                    st.session_state[p1k] = support_opts[0]
+                sup = st.selectbox("파티(서폿)", support_opts, label_visibility="collapsed", key=p1k)
+                st.session_state.party = [sup]
 
-                p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
-                st.session_state.party = [x for x in [norm_none(p1)] if x]
-
+            # -------------------------
+            # 2) 멜랑/흑보리(딜러)
+            # -------------------------
             elif cookie == "멜랑크림 쿠키":
-                seaz_options = [x for x in sim.SEAZNITES.keys() if x.startswith("바닐라몬드:")]
+                seaz_options = [x for x in getattr(sim, "SEAZNITES", {}).keys() if str(x).startswith("바닐라몬드:")]
                 seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [""]
 
                 PREFERRED_SEAZ = "바닐라몬드:추격자의 결의"
-
                 cur = st.session_state.get(sk, "")
                 if (not cur) or (cur not in seaz_options):
                     st.session_state[sk] = PREFERRED_SEAZ if PREFERRED_SEAZ in seaz_options else seaz_options[0]
@@ -1122,40 +1161,26 @@ with st.container(key="outer_shell", border=False):
                 with st.container(key="party_group", border=False):
                     st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
 
-                    party_all = ["없음", "이슬맛 쿠키", "윈드파라거스 쿠키"]
+                    # 역할 고정: 서폿 1(이슬/샬롯 선택) + 스트 1(윈드 고정)
+                    support_opts = ["이슬맛 쿠키", "샬롯맛 쿠키"]
+                    init_once(p1k, "샬롯맛 쿠키")
+                    if st.session_state.get(p1k, support_opts[0]) not in support_opts:
+                        st.session_state[p1k] = support_opts[0]
+                    sup = st.selectbox("파티(서폿)", support_opts, label_visibility="collapsed", key=p1k)
 
-                    init_once(p1k, "이슬맛 쿠키")
                     init_once(p2k, "윈드파라거스 쿠키")
+                    st.selectbox("파티(스트)", ["윈드파라거스 쿠키"], label_visibility="collapsed", disabled=True, key=p2k)
 
-                    p1 = st.selectbox("파티 슬롯 1", party_all, label_visibility="collapsed", key=p1k)
+                    st.session_state.party = [sup, "윈드파라거스 쿠키"]
 
-                    if p1 == "이슬맛 쿠키":
-                        party2_opts = ["없음", "윈드파라거스 쿠키"]
-                    elif p1 == "윈드파라거스 쿠키":
-                        party2_opts = ["없음", "이슬맛 쿠키"]
-                    else:
-                        party2_opts = party_all
-
-                    if st.session_state.get(p2k, "없음") not in party2_opts:
-                        st.session_state[p2k] = "없음"
-
-                    p2 = st.selectbox("파티 슬롯 2", party2_opts, label_visibility="collapsed", key=p2k)
-
-                    if p1 != "없음" and p2 == p1:
-                        st.session_state[p2k] = "없음"
-                        p2 = "없음"
-
-                    party_list = [norm_none(p1), norm_none(p2)]
-                    party_list = [x for x in party_list if x]
-                    st.session_state.party = party_list
-                    
             elif cookie == "흑보리맛 쿠키":
-                seaz_options = (getattr(sim, "black_barley_allowed_seaz", lambda: None)() or
-                                [x for x in sim.SEAZNITES.keys() if x.startswith("페퍼루비:")])
+                seaz_options = (
+                    getattr(sim, "black_barley_allowed_seaz", lambda: None)()
+                    or [x for x in getattr(sim, "SEAZNITES", {}).keys() if str(x).startswith("페퍼루비:")]
+                )
                 seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [""]
 
                 PREFERRED_SEAZ = "페퍼루비:영예로운 기사도"
-
                 cur = st.session_state.get(sk, "")
                 if (not cur) or (cur not in seaz_options):
                     st.session_state[sk] = (PREFERRED_SEAZ if (PREFERRED_SEAZ and PREFERRED_SEAZ in seaz_options) else seaz_options[0])
@@ -1163,38 +1188,24 @@ with st.container(key="outer_shell", border=False):
                 seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
                 st.session_state.seaz = seaz
 
-                # 2) 파티(2슬롯)
                 with st.container(key="party_group", border=False):
                     st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
 
-                    party_all = ["없음", "이슬맛 쿠키", "윈드파라거스 쿠키"]
+                    support_opts = ["이슬맛 쿠키", "샬롯맛 쿠키"]
+                    init_once(p1k, "샬롯맛 쿠키")
+                    if st.session_state.get(p1k, support_opts[0]) not in support_opts:
+                        st.session_state[p1k] = support_opts[0]
+                    sup = st.selectbox("파티(서폿)", support_opts, label_visibility="collapsed", key=p1k)
 
-                    init_once(p1k, "이슬맛 쿠키")
                     init_once(p2k, "윈드파라거스 쿠키")
+                    st.selectbox("파티(스트)", ["윈드파라거스 쿠키"], label_visibility="collapsed", disabled=True, key=p2k)
 
-                    p1 = st.selectbox("파티 슬롯 1", party_all, label_visibility="collapsed", key=p1k)
+                    st.session_state.party = [sup, "윈드파라거스 쿠키"]
 
-                    if p1 == "이슬맛 쿠키":
-                        party2_opts = ["없음", "윈드파라거스 쿠키"]
-                    elif p1 == "윈드파라거스 쿠키":
-                        party2_opts = ["없음", "이슬맛 쿠키"]
-                    else:
-                        party2_opts = party_all
-
-                    if st.session_state.get(p2k, "없음") not in party2_opts:
-                        st.session_state[p2k] = "없음"
-
-                    p2 = st.selectbox("파티 슬롯 2", party2_opts, label_visibility="collapsed", key=p2k)
-
-                    if p1 != "없음" and p2 == p1:
-                        st.session_state[p2k] = "없음"
-                        p2 = "없음"
-
-                    party_list = [norm_none(p1), norm_none(p2)]
-                    party_list = [x for x in party_list if x]
-                    st.session_state.party = party_list
-
-            else:
+            # -------------------------
+            # 3) 이슬(서폿) / 샬롯(서폿)
+            # -------------------------
+            elif cookie == "이슬맛 쿠키":
                 fixed_seaz = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
                 fixed_list = hide_breeder_when_not_wind(cookie, [fixed_seaz])
                 st.session_state[sk] = fixed_list[0]
@@ -1202,16 +1213,49 @@ with st.container(key="outer_shell", border=False):
                 st.session_state.seaz = fixed_list[0]
 
                 st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
-                party_all = ["없음", "윈드파라거스 쿠키"]
                 init_once(p1k, "윈드파라거스 쿠키")
+                st.selectbox("파티(스트)", ["윈드파라거스 쿠키"], label_visibility="collapsed", disabled=True, key=p1k)
+                st.session_state.party = ["윈드파라거스 쿠키"]
 
-                p1 = st.selectbox("파티 슬롯", party_all, label_visibility="collapsed", key=p1k)
-                st.session_state.party = [x for x in [norm_none(p1)] if x]
+            elif cookie == "샬롯맛 쿠키":
+                # 샬롯 메인 시뮬 + 역할 고정(서폿) => 파티는 스트(윈드) 고정
+
+                # 1) 원본 옵션 불러오기
+                all_opts = (
+                    getattr(sim, "char_allowed_seaz", lambda: None)()
+                    or list(getattr(sim, "SEAZNITES", {}).keys())
+                    or [""]
+                )
+
+                # 2) 허브그린드만 노출
+                seaz_options = [x for x in all_opts if str(x).startswith("허브그린드:")]
+
+                # 3) 혹시 비면(데이터 없을 때) 최소 1개는 유지
+                if not seaz_options:
+                    fallback = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
+                    seaz_options = [fallback]
+
+                # (기존 필터 유지)
+                seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [seaz_options[0]]
+
+                cur = st.session_state.get(sk, "")
+                if (not cur) or (cur not in seaz_options):
+                    st.session_state[sk] = seaz_options[0]
+
+                seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
+                st.session_state.seaz = seaz
+
+                st.markdown('<div class="ctl-label">파티</div>', unsafe_allow_html=True)
+                init_once(p1k, "윈드파라거스 쿠키")
+                st.selectbox("파티(스트)", ["윈드파라거스 쿠키"], label_visibility="collapsed", disabled=True, key=p1k)
+                st.session_state.party = ["윈드파라거스 쿠키"]
+
+            else:
+                raise ValueError(f"지원하지 않는 쿠키: {cookie}")
 
             st.markdown('<hr class="u-divider">', unsafe_allow_html=True)
 
             run = st.button("실행", type="primary", use_container_width=True, key="run_btn")
-
             progress_slot = st.empty()
 
             def _progress_html(pct: int) -> str:
@@ -1232,14 +1276,12 @@ with st.container(key="outer_shell", border=False):
                     p = max(0.0, min(1.0, float(p)))
                     progress_slot.markdown(_progress_html(int(p * 100)), unsafe_allow_html=True)
 
-                # 초기화 (UnboundLocalError 방지)
                 best = None
                 best_kind = None
 
-                # 장비 선택 모드에 따른 override
-                equip_override_local = None
-                if st.session_state.mode == "선택(수동)":
-                    equip_override_local = st.session_state.equip or None
+                # 핵심 수정: 수동모드가 아니어도 session_state.equip 이 있으면 override로 넘김
+                # - 샬롯/이슬은 UI에서 해적셋 고정이라 st.session_state.equip에 값이 들어가 있음
+                equip_override_local = st.session_state.equip or None
 
                 if kind_cookie == "wind":
                     best = sim.optimize_wind_cycle(
@@ -1260,9 +1302,11 @@ with st.container(key="outer_shell", border=False):
                         equip_override=equip_override_local,
                     )
                     best_kind = "melan"
-                
+
                 elif kind_cookie == "bb":
                     fn = getattr(sim, "optimize_black_barley_cycle", None)
+                    if fn is None:
+                        raise ValueError("sim.optimize_black_barley_cycle 가 없습니다.")
                     best = fn(
                         seaz_name=st.session_state.seaz,
                         party=st.session_state.party,
@@ -1282,14 +1326,62 @@ with st.container(key="outer_shell", border=False):
                     )
                     best_kind = "isle"
 
-                    # --- 고정값 ---
-                    if isinstance(best, dict):
-                        best["potentials"] = {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}  # 고정
-                        best["unique_fixed"] = "정화된 에메랄딘의 기억"
-                        best["artifact_fixed"] = "비에 젖은 과거"
+                elif kind_cookie == "char":
+                    fn = getattr(sim, "optimize_char_cycle", None)
+                    if fn is None:
+                        raise ValueError("sim.optimize_char_cycle 가 없습니다. cookie_simulator.py에 추가해 주세요.")
+                    best = fn(
+                        seaz_name=st.session_state.seaz,
+                        party=st.session_state.party,
+                        step=STEP_FIXED,
+                        progress_cb=cb,
+                        equip_override=equip_override_local,
+                    )
+                    best_kind = "char"
 
                 else:
                     raise ValueError(f"지원하지 않는 kind_cookie: {kind_cookie}")
+
+                # -----------------------------------------------------
+                # 공통 후처리(필요한 것만)
+                # -----------------------------------------------------
+                # 잠재 고정은 서폿(이슬/샬롯)만
+                if isinstance(best, dict) and best_kind in ("isle", "char"):
+                    best["potentials"] = {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
+
+                # -----------------------------------------------------
+                # 이슬/샬롯: 유니크 + 설탕유리조각 "자동으로 뽑기"
+                # - sim에 함수가 있으면 그걸 쓰고,
+                # - 없으면(=아직 구현 안했으면) 그냥 비워둠
+                # -----------------------------------------------------
+                if isinstance(best, dict) and best_kind in ("isle", "char"):
+                    # 장비 고정 보강 (표시/저장용)
+                    if best_kind == "isle":
+                        best.setdefault("equip_fixed", "전설의 유령해적 세트")
+                        best.setdefault("artifact_fixed", "비에 젖은 과거")
+                    else:
+                        best.setdefault("equip", "전설의 유령해적 세트")
+
+                    # 1) 유니크 자동 선택
+                    pick_unique = getattr(sim, "pick_best_support_unique", None)
+                    if callable(pick_unique):
+                        u = pick_unique(
+                            cookie_kr=("이슬맛 쿠키" if best_kind == "isle" else "샬롯맛 쿠키"),
+                            party=st.session_state.party,
+                        )
+                        if u and (not best.get("unique")):
+                            best["unique"] = u
+
+                    # 2) 설탕유리조각 자동 선택
+                    pick_shards = getattr(sim, "pick_best_support_shards", None)
+                    if callable(pick_shards):
+                        sh = pick_shards(
+                            cookie_kr=("이슬맛 쿠키" if best_kind == "isle" else "샬롯맛 쿠키"),
+                            party=st.session_state.party,
+                            equip="전설의 유령해적 세트",
+                        )
+                        if isinstance(sh, dict) and (not best.get("shards")):
+                            best["shards"] = sh
 
                 progress_slot.markdown(_progress_html(100), unsafe_allow_html=True)
                 return best, best_kind
@@ -1328,10 +1420,13 @@ with st.container(key="outer_shell", border=False):
                     c2.metric("DPS", f"{best.get('dps', 0):,.4f}")
                     c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
 
-                else:
-                    pass
+                elif kind == "char":
+                    c1, c2, c3 = st.columns(3, gap="small")
+                    c1.metric("회복량", f"{best.get('max_heal', 0):,.0f}")   # ← 샬롯 최적화 결과에 넣을 키
+                    c2.metric("DPS", f"{best.get('dps', 0):,.4f}")          # 필요 없으면 빼도 됨
+                    c3.metric("1사이클 총딜", f"{best.get('cycle_total_damage', 0):,.4f}")
 
-                if kind in ("wind", "melan", "bb", "isle"):
+                if kind in ("wind", "melan", "bb", "isle", "char"):
                     tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
                 else:
                     tab1, tab2, tab3 = st.tabs(["결과", "최종 스탯", "사이클 기여도"])
@@ -1346,38 +1441,38 @@ with st.container(key="outer_shell", border=False):
                                 rows.append({"항목": k, "값": v})
 
                         rows = []
-                        if kind in ("wind", "melan", "bb"):
-                            add(rows, "장비 선택 모드", st.session_state.mode) 
+                        if kind in ("wind", "melan", "bb", "char"):
+                            add(rows, "장비 선택 모드", st.session_state.mode)
                             add(rows, "쿠키", best.get("cookie", ""))
                             add(rows, "장비", best.get("equip", ""))
                             add(rows, "시즈나이트", best.get("seaz", ""))
                             add(rows, "유니크 조각", best.get("unique", ""))
                             add(rows, "아티팩트", best.get("artifact", ""))
                             add(rows, "파티", party_txt)
-                        elif kind in ("isle"):
-                            add(rows, "장비 선택 모드", st.session_state.mode) 
+                        elif kind in ("isle",):
+                            add(rows, "장비 선택 모드", st.session_state.mode)
                             add(rows, "쿠키", "이슬맛 쿠키")
                             add(rows, "장비", best.get("equip_fixed", ""))
                             add(rows, "시즈나이트", best.get("seaz_fixed", getattr(sim, "FIXED_SEAZ_ISLE", "")))
-                            add(rows, "유니크 조각", best.get("unique_fixed", "정화된 에메랄딘의 기억"))
+                            u = best.get("unique", "") or best.get("unique_fixed", "")
+                            add(rows, "유니크 조각", u)
                             add(rows, "아티팩트", best.get("artifact_fixed", "비에 젖은 과거"))
                             add(rows, "파티", party_txt)
-                        else:
-                            pass
 
                         return pd.DataFrame(rows, columns=["항목", "값"])
 
                     setting_df = make_setting_df(best, kind)
 
-                    if kind in ("wind", "melan", "bb"):
+                    if kind in ("wind", "melan", "bb", "char"):
                         p_df = pretty_potentials(best.get("potentials", {}))
                         s_df = pretty_shards(best.get("shards", {}))
-                    elif kind in ("isle"):
+                    elif kind in ("isle",):
                         pot = best.get("potentials") or {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
                         p_df = pretty_potentials(pot)
                         s_df = pretty_shards(best.get("shards", {}))
                     else:
-                        pass
+                        p_df = pd.DataFrame(columns=["항목", "값"])
+                        s_df = pd.DataFrame(columns=["항목", "값"])
 
                     html = f"""
                     <div class="summary-grid">
@@ -1388,7 +1483,7 @@ with st.container(key="outer_shell", border=False):
                     """
                     st.markdown(html, unsafe_allow_html=True)
 
-                if kind in ("wind", "melan", "bb", "isle"):
+                if kind in ("wind", "melan", "bb", "isle", "char"):
                     with tab2:
                         stats = best.get("stats", {})
                         if not stats:
@@ -1401,7 +1496,7 @@ with st.container(key="outer_shell", border=False):
                             )
                             render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df)
 
-                if kind in ("wind", "melan", "bb", "isle"):
+                if kind in ("wind", "melan", "bb", "isle", "char"):
                     with tab3:
                         cb = best.get("cycle_breakdown", {})
                         df = cycle_breakdown_df(cb)
@@ -1415,6 +1510,7 @@ with st.container(key="outer_shell", border=False):
 
             if st.session_state.last_run:
                 st.caption(f"실행: {st.session_state.last_run}")
+
 
 # =====================================================
 # Global note (outer_shell 밖)
