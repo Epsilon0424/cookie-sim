@@ -395,21 +395,23 @@ def apply_seaz_passive(stats: Dict[str, float], seaz_name: str, uptime_key_prefi
 
     passive = info.get("passive", {}) or {}
 
-    # 파티 기준 버프증폭 합계 우선
     BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp_total", stats.get("buff_amp", 0.0))))
     buff_scale = 1.0 + BA
 
-    # 업타임 키: "SEAZ_PASSIVE::시즈이름" (없으면 ALWAYS=1.0)
     key = f"{uptime_key_prefix}{seaz_name}"
     u = get_uptime(key)
 
-    # heal_pct는 힐 계산에서 그대로 (1+heal_pct)로 쓰이므로 여기에 누적
+    # duration 같은 메타키는 스킵 (필요시 get_uptime 설정으로 처리)
+    # (여기서는 단순히 적용만 안 함)
     if "heal_pct" in passive:
         stats["heal_pct"] = float(stats.get("heal_pct", 0.0)) + float(passive["heal_pct"]) * u * buff_scale
 
-    # 파티 속피는 엔진 키(buff_all_elem_dmg_raw)로 넣어야 base_damage_only에 반영됨
     if "ally_all_elem_dmg" in passive:
         stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + float(passive["ally_all_elem_dmg"]) * u * buff_scale
+
+    # 백마법사 의지 atk_pct 반영
+    if "atk_pct" in passive:
+        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(passive["atk_pct"]) * u * buff_scale
 
     return stats
 
@@ -1762,6 +1764,7 @@ def wind_cycle_damage(stats: Dict[str, float], party: List[str], artifact_name: 
     breakdown["unique"] = unique_total
 
     total_damage = direct + strike + unique_total
+    total_damage *= float(local.get("elem_dmg_mult", 1.0))
     dps = total_damage / total_time if total_time > 0 else 0.0
 
     return {
@@ -3033,7 +3036,7 @@ def _bb_precompute_fast_events() -> Tuple[List[Tuple[str, float, bool, bool, boo
             events.append(("special", float(BB_SPECIAL_COEFF), poison_active, False, False))
             poison_until = max(poison_until, t + BB_POISON_DUR)
 
-            # 독 부가타: 독 적용된 유닛으로 처리(기존 의도 유지)
+            # 독 부가타: 독 적용된 유닛으로 처리
             events.append(("proc_special", float(BB_POISON_EXTRA_COEFF * 2.0), True, False, False))
 
             next8_left = 8
@@ -3069,11 +3072,15 @@ def _bb_precompute_fast_events() -> Tuple[List[Tuple[str, float, bool, bool, boo
 
     return events, total_time
 
-
 _BB_FAST_EVENTS, _BB_FAST_TOTAL_TIME = _bb_precompute_fast_events()
 
-
 def black_barley_cycle_damage_fast(stats: Dict[str, float], party: List[str], artifact_name: str) -> Dict[str, float]:
+    """
+    FAST 이벤트 기반 흑보리 1사이클 딜 계산.
+    - 외부 의존:
+      base_damage_only(stats) -> float
+      strike_total_from_direct(total_direct, cookie_name, stats, party) -> float
+    """
     total_time = float(_BB_FAST_TOTAL_TIME)
 
     # 패시브 atk% 추가
@@ -3145,6 +3152,22 @@ def black_barley_cycle_damage_fast(stats: Dict[str, float], party: List[str], ar
     breakdown["unique"] = unique_total
 
     total_damage = total_direct + strike + unique_total
+
+    # -------------------------------------------------
+    # elem_dmg_mult (윈파처럼 local.get으로 안전하게)
+    # - stats["_local"] dict를 우선 사용
+    # - 없으면 stats["elem_dmg_mult"]
+    # - 없으면 1.0
+    # -------------------------------------------------
+    local_raw = stats.get("_local", None)
+    local: Dict[str, Any] = local_raw if isinstance(local_raw, dict) else {}
+    elem_dmg_mult = float(local.get("elem_dmg_mult", stats.get("elem_dmg_mult", 1.0)))
+
+    if elem_dmg_mult != 1.0:
+        total_damage *= elem_dmg_mult
+        for k in breakdown:
+            breakdown[k] *= elem_dmg_mult
+
     dps = total_damage / total_time if total_time > 0 else 0.0
 
     return {
@@ -3247,7 +3270,16 @@ def optimize_black_barley_cycle(
     progress_cb: Optional[Callable[[float], None]] = None,
     equip_override: Optional[Union[str, List[str], Tuple[str, ...], set]] = None,
 ) -> Optional[dict]:
-
+    """
+    흑보리 1사이클 DPS 최대화.
+    - 외부 의존:
+      _resolve_equip_list_override(...)
+      build_stats_for_combo(...)
+      is_valid_by_caps(stats)
+      _min_crit_slots_needed_for_crit100_generic(stats)
+      is_crit_100(stats)
+      SHARD_INC, NORMAL_SLOTS
+    """
     cookie = "흑보리맛 쿠키"
     base = BASE_STATS_BLACK_BARLEY[cookie].copy()
 
@@ -3258,6 +3290,7 @@ def optimize_black_barley_cycle(
 
     shard_candidates = black_barley_generate_shard_candidates_no_cr(step=step)
 
+    # shard_candidates -> (adds_list) 미리 계산
     shard_adds_list: List[Tuple[Dict[str, int], List[Tuple[str, float]], int]] = []
     for sh in shard_candidates:
         adds: List[Tuple[str, float]] = []
@@ -3322,7 +3355,7 @@ def optimize_black_barley_cycle(
                         base_cr = float(template.get("crit_rate", 0.0))
                         eff_cr = base_cr * promo + buff_cr
 
-                        # 이미 100% 초과면 줄일 방법이 없다고 보고 스킵(기존 의도 유지)
+                        # 이미 100% 초과면 줄일 방법이 없다고 보고 스킵
                         if eff_cr > 1.0 + eps:
                             done += len(shard_candidates)
                             if (done % tick) == 0:
@@ -3339,10 +3372,11 @@ def optimize_black_barley_cycle(
                     else:
                         req_cr_slots = 0
 
+                    # 로그/표시용 내부키는 최적화 평가에 필요없으면 제거
                     template.pop("_applied_party_buffs", None)
                     template.pop("_applied_enemy_debuffs", None)
 
-                    # armor_pen이 shards로 변동 없음 → 초과면 즉시 컷(기존 로직 유지)
+                    # armor_pen이 shards로 변동 없음 → 초과면 즉시 컷
                     promo_ap_mult = float(template.get("promo_armor_pen_mult", 1.0))
                     base_ap = float(template.get("armor_pen", 0.0)) * promo_ap_mult
                     if base_ap > 0.80 + 1e-12:
@@ -3505,7 +3539,6 @@ def apply_charlotte_artifact_minimal(stats: Dict[str, float], artifact_name: str
     stats["elem_dmg_mult"] = float(stats.get("elem_dmg_mult", 1.0)) * CHAR_ARTI_REPOSE_ELEM_MULT
     return stats
 
-
 # -----------------------------
 # (E-2.8) 승급(프로모) 최소 반영 토글
 #  - "힐/패시브/피어서"만 최소 반영
@@ -3513,7 +3546,7 @@ def apply_charlotte_artifact_minimal(stats: Dict[str, float], artifact_name: str
 CHARLOTTE_PROMO_ENABLED = True
 
 # 패시브 스킬 피해 +100%  => 패시브 항목에 ×2.0
-CHAR_PROMO_PASSIVE_DMG_MULT = 2.0
+CHAR_PROMO_PASSIVE_DMG_MULT = 1.0
 
 # 페이트피어서 +1개 생성
 CHAR_FATE_PIERCER_BASE_COUNT = 2
@@ -3533,7 +3566,7 @@ CHAR_PROMO_ULT_HEAL_MULT = 1.20
 CHAR_FATE_PIERCER_DURATION = 15.0
 
 # "필드 위 쿠키의 공격에 반응" 빈도(초당). 파티/보스에 따라 달라서 튜닝값.
-CHAR_FATE_REACTS_PER_SEC = 1.0   # 예시값(필요하면 UI로 조절 추천)
+CHAR_FATE_REACTS_PER_SEC = 1.0
 
 # 스택 규칙
 CHAR_SOUL_STACK_PER_HIT = 1
@@ -3558,7 +3591,6 @@ def charlotte_soul_counts(total_time: float, promo_on: bool) -> Dict[str, int]:
     stacks = hit_cnt * int(CHAR_SOUL_STACK_PER_HIT)
     pop_cnt = stacks // int(CHAR_SOUL_STACK_POP)
     return {"piercer_cnt": piercer_cnt, "hit_cnt": hit_cnt, "pop_cnt": int(pop_cnt)}
-
 
 # -----------------------------
 # (E-3) 회복(힐) 규칙
@@ -3751,7 +3783,6 @@ def charlotte_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[st
         "breakdown_unique": breakdown["unique"],
         "promo_on": promo_on,
     }
-
 
 def optimize_char_cycle(
     seaz_name: str,
