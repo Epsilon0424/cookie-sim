@@ -379,7 +379,8 @@ SEAZNITES = {
     "바닐라몬드:추격자의 결의":   {"passive": {"final_dmg": 0.30, "move_spd": 0.10}, "sub": VANILLA_MONDE_SUB},
 
     "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.25, "ally_all_elem_dmg": 0.30}, "sub": HERB_GREEN_SUB},
-    "허브그린드:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45, "duration": 10.0}, "sub": HERB_GREEN_SUB},
+    "허브그린드:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45}, "sub": HERB_GREEN_SUB},
+    "허브그린드:가벼운 손길": {"passive": {"heal_pct": 0.16, "atk_spd": 0.10, "final_dmg": 0.20}, "sub": HERB_GREEN_SUB},
 }
 
 # =====================================================
@@ -469,7 +470,7 @@ def apply_artifact(stats: Dict[str, float], artifact_name: str) -> None:
     add(stats, a.get("base_stats", {}))
     add(stats, a.get("unique_stats", {}))
 
-    # 2) 고유 버프(증폭 O)  — (여기선 stats["buff_amp"] 기준)
+    # 2) 고유 버프(증폭 O)
     BA = float(stats.get("buff_amp", 0.0))
     buff_scale = 1.0 + BA
     ub = a.get("unique_buffs", {}) or {}
@@ -803,15 +804,12 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
         stats["_werewolf_self_move_spd"]  = float(u.get("self_move_spd_buff", 0.0))
         return
 
-# =====================================================
-# 9) 공통: 파티 버프/디버프
-# =====================================================
-
 def apply_party_buffs(
     stats: dict,
     party: List[str],
     main_cookie_name: str,
-    party_artifacts: Optional[Dict[str, str]] = None,  # [ADD] 파티 아티팩트 맵
+    party_artifacts: Optional[Dict[str, str]] = None,
+    party_uniques: Optional[Dict[str, str]] = None,   # [ADD]
 ):
     # =====================================================
     # 0) 안전: 기본 키 세팅
@@ -827,7 +825,6 @@ def apply_party_buffs(
     stats.setdefault("element_strike_dmg", 0.0)
     stats.setdefault("buff_armor_pen_raw", 0.0)
 
-    # [ADD] 패시브/속성 피해 배율 키 (다른 쿠키가 읽어서 반영할 수 있게)
     stats.setdefault("passive_dmg_mult", 1.0)
     stats.setdefault("elem_dmg_mult", 1.0)
 
@@ -848,19 +845,17 @@ def apply_party_buffs(
 
     # =====================================================
     # 2) 버프/디버프 증폭 스케일
-    #   "파티 합계"가 있으면 그걸 우선 사용
     # =====================================================
     BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
 
     buff_scale   = 1.0 + BA
-    debuff_scale = 1.0 + DA  # 현재 apply_party_buffs 내에선 안 쓰지만 남겨둠
+    debuff_scale = 1.0 + DA
 
     # =====================================================
     # 3) 쿠키별 파티 버프
     # =====================================================
     def _apply_isle_buffs():
-        # 이슬이 메인이면, 이슬 본인 최적화/빌더쪽에서 처리하는 걸 전제로 중복 방지
         if main_cookie_name == "이슬맛 쿠키":
             return
 
@@ -875,44 +870,40 @@ def apply_party_buffs(
         stats["buff_crit_dmg_raw"] += 0.40 * u * buff_scale
 
     def _apply_charlotte_party_effects():
-        # 결속(최종공)
         u_bond = 1.0
         stats["final_atk_mult"] += 0.392 * u_bond * buff_scale
 
-        # 진혼곡(파티 속피)
         u_requiem = 1.0
         stats["buff_all_elem_dmg_raw"] += 0.25 * u_requiem * buff_scale
 
-        # 적 패시브 받피(+10%) 같은 류
         stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + 0.10
 
     # =====================================================
     # 4) 샬롯 아티팩트 오라(희미한 날갯짓)
     # =====================================================
+    FIXED_PARTY_ARTIFACT: Dict[str, str] = {
+        "샬롯맛 쿠키": "희미한 날갯짓",
+    }
+
     def _apply_charlotte_wings_artifact_aura():
-        # 메인이 샬롯이면, 샬롯 최적화 코드에서 이미 처리 → 중복 방지
         if main_cookie_name == "샬롯맛 쿠키":
             return
 
-        # party_artifacts 없으면 stats 내 저장된 맵 fallback
         arti_map = party_artifacts or stats.get("party_artifacts") or {}
         try:
-            char_arti = str(arti_map.get("샬롯맛 쿠키", ""))
+            char_arti = str(arti_map.get("샬롯맛 쿠키", "")).strip()
         except Exception:
             char_arti = ""
 
+        # fallback 제거: 명시적으로 "희미한 날갯짓"일 때만 발동
         if char_arti != "희미한 날갯짓":
             return
 
-        # 공허(+20%) / 유실(+10%) : 패시브 피해 배율
         stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) * 1.20 * 1.10
-
-        # 진혼(+25%) : 모든 속성피해 배율
-        stats["elem_dmg_mult"] = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
+        stats["elem_dmg_mult"]    = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
 
     # =====================================================
-    # 5) [ADD] 파티원 시즈 패시브를 메인 stats에 합산
-    #    (요청한 고정 시즈)
+    # 5) 파티원 시즈 패시브 합산 (기존)
     # =====================================================
     FIXED_PARTY_SEAZ: Dict[str, str] = {
         "이슬맛 쿠키": "허브그린드:백마법사의 의지",
@@ -921,7 +912,6 @@ def apply_party_buffs(
     }
 
     def _apply_party_member_seaz(cookie_name: str):
-        # 메인이 해당 쿠키면 자기 시즈는 자기 빌더에서 처리하는 걸 전제로 중복 방지
         if main_cookie_name == cookie_name:
             return
         if cookie_name not in (party or []):
@@ -931,12 +921,48 @@ def apply_party_buffs(
         if not seaz:
             return
 
-        # apply_seaz_passive 내부에서 buff_amp_total/party_buff_amp_total + uptime까지 처리
         apply_seaz_passive(stats, seaz)
 
     # =====================================================
-    # 6) 적용 순서
-    #    - 일반 파티버프 → 오라 → 파티원 시즈(버프성 키를 raw에 더함)
+    # 6) [ADD] 파티원 유니크 설유 효과 합산
+    #   - party_uniques 맵 우선, 없으면 FIXED_PARTY_UNIQUE fallback
+    #   - 버프증폭 스케일은 "party_buff_amp_total"을 소스 기준으로 근사 적용
+    # =====================================================
+    FIXED_PARTY_UNIQUE: Dict[str, str] = {
+        "이슬맛 쿠키": "버터밀크맛 쿠키의 기억",
+        "샬롯맛 쿠키": "버터밀크맛 쿠키의 기억",
+        "윈드파라거스 쿠키": "연금술사맛 쿠키의 기억",
+    }
+
+    def _apply_party_member_unique(cookie_name: str):
+        if main_cookie_name == cookie_name:
+            return
+        if cookie_name not in (party or []):
+            return
+
+        u_map = party_uniques or stats.get("party_uniques") or {}
+        try:
+            u_name = str(u_map.get(cookie_name, "")) if u_map else ""
+        except Exception:
+            u_name = ""
+
+        if (not u_name) or (u_name.upper() == "AUTO"):
+            u_name = FIXED_PARTY_UNIQUE.get(cookie_name, "")
+
+        if (not u_name) or (u_name == "NONE"):
+            return
+
+        # 유니크 버프는 "소스(서포터)" 버프증폭을 타는 게 자연스러운데,
+        # 현재 모델은 party_buff_amp_total로 근사해서 apply_unique의 buff_amp에 잠깐 주입한다.
+        orig_ba = float(stats.get("buff_amp", 0.0))
+        try:
+            stats["buff_amp"] = float(stats.get("party_buff_amp_total", orig_ba))
+            apply_unique(stats, cookie_name, u_name)
+        finally:
+            stats["buff_amp"] = orig_ba
+
+    # =====================================================
+    # 7) 적용 순서
     # =====================================================
     if has_char:
         _apply_once("PARTY_CHARLOTTE", _apply_charlotte_party_effects)
@@ -948,10 +974,14 @@ def apply_party_buffs(
     if has_wind:
         _apply_once("PARTY_WIND", _apply_wind_party_effects)
 
-    # 파티원 시즈 패시브도 합산
     _apply_once("PARTY_SEAZ_ISLE", lambda: _apply_party_member_seaz("이슬맛 쿠키"))
     _apply_once("PARTY_SEAZ_CHARLOTTE", lambda: _apply_party_member_seaz("샬롯맛 쿠키"))
     _apply_once("PARTY_SEAZ_WIND", lambda: _apply_party_member_seaz("윈드파라거스 쿠키"))
+
+    # 파티원 유니크 합산(이슬 포함)
+    _apply_once("PARTY_UNIQUE_ISLE", lambda: _apply_party_member_unique("이슬맛 쿠키"))
+    _apply_once("PARTY_UNIQUE_CHARLOTTE", lambda: _apply_party_member_unique("샬롯맛 쿠키"))
+    _apply_once("PARTY_UNIQUE_WIND", lambda: _apply_party_member_unique("윈드파라거스 쿠키"))
 
     return stats
 
@@ -1133,9 +1163,11 @@ def skill_bonus_mult(stats: Dict[str, float], skill_type: str) -> float:
     if skill_type == "ult":
         return 1.0 + stats.get("ult_dmg", 0.0)
     if skill_type == "passive":
-        # [ADD] 유실: 적이 받는 패시브 피해 증가(패시브에만 적용)
+        # [ADD] 적이 받는 패시브 피해 증가(패시브에만 적용)
         taken = 1.0 + float(stats.get("enemy_passive_taken_inc", 0.0))
-        return (1.0 + stats.get("passive_dmg", 0.0)) * taken
+        # [ADD] 샬롯 아티팩트 오라 등: 패시브 피해 배율
+        p_mult = float(stats.get("passive_dmg_mult", 1.0))
+        return (1.0 + stats.get("passive_dmg", 0.0)) * taken * p_mult
     return 1.0
 
 # =====================================================
@@ -1288,6 +1320,8 @@ def build_stats_for_combo(
     unique_name: str,
     party: List[str],
     artifact_name: str,
+    party_artifacts: Optional[Dict[str, str]] = None,  # [ADD] 있으면
+    party_uniques: Optional[Dict[str, str]] = None,    # [ADD]
 ) -> Dict[str, float]:
 
     stats: Dict[str, float] = {
@@ -1851,7 +1885,7 @@ def optimize_wind_cycle(
     base = BASE_STATS_WIND[cookie].copy()
 
     equips = _resolve_equip_list_override(equip_override, wind_allowed_equips())
-    uniques = wind_allowed_uniques()
+    uniques = ["연금술사맛 쿠키의 기억"]
     potentials = wind_allowed_potentials()
     artifacts = wind_allowed_artifacts()
 
@@ -2011,7 +2045,7 @@ MELAN_PROMO_ENABLED = True
 MELAN_PROMO_CRIT_RATE_MULT = 1.10
 MELAN_PROMO_ARMOR_PEN_MULT = 1.08
 MELAN_PROMO_ATK_PCT_MULT   = 1.10
-MELAN_PROMO_FINAL_DMG_MULT = 1.05
+MELAN_PROMO_FINAL_DMG_MULT = 1.0
 
 MELAN_PROMO_UNDEAD_EXTRA     = 1
 MELAN_PROMO_NOVA_EXTRA       = 2
@@ -2029,7 +2063,7 @@ BASE_STATS_MELAN = {
         "crit_rate": 0.25,
         "crit_dmg": 1.875,
         "armor_pen": 0.08,
-        "final_dmg": 0.30,   # 전용무기 포함
+        "final_dmg": 0.35,   # 전용무기 포함
     }
 }
 
@@ -2273,16 +2307,8 @@ def melan_cycle_damage_fast(stats: Dict[str, float], party: List[str]) -> Dict[s
 def melan_allowed_equips() -> List[str]:
     return ["달콤한 설탕 깃털복", "미지의 방랑자", "수상한 사냥꾼", "시간관리국의 제복"]
 
-
 def melan_allowed_uniques() -> List[str]:
-    res = ["NONE"]
-    for name in UNIQUE_SHARDS.keys():
-        if name == "NONE":
-            continue
-        if is_unique_allowed("멜랑크림 쿠키", name):
-            res.append(name)
-    return res
-
+    return ["다크초코 쿠키의 기억"]
 
 def melan_allowed_artifacts() -> List[str]:
     return ["끝나지 않는 죽음의 밤"]
@@ -2540,7 +2566,7 @@ ISLE_FIXED_POT = {
     "debuff_amp": 0,
 }
 
-ISLE_FIXED_UNIQUE   = "블랙베리맛 쿠키의 기억"
+ISLE_FIXED_UNIQUE   = "버터밀크맛 쿠키의 기억"
 ISLE_FIXED_ARTIFACT = "비에 젖은 과거"
 ISLE_FIXED_EQUIP    = "전설의 유령해적 세트"
 
@@ -3241,13 +3267,7 @@ def black_barley_allowed_equips() -> List[str]:
     return ["달콤한 설탕 깃털복", "미지의 방랑자", "수상한 사냥꾼", "시간관리국의 제복"]
 
 def black_barley_allowed_uniques() -> List[str]:
-    res = ["NONE"]
-    for name in UNIQUE_SHARDS.keys():
-        if name == "NONE":
-            continue
-        if is_unique_allowed("흑보리맛 쿠키", name):
-            res.append(name)
-    return res
+    return ["샬롯맛 쿠키의 기억"]
 
 def black_barley_allowed_artifacts() -> List[str]:
     return ["품 속의 온기"]
@@ -3508,16 +3528,14 @@ def optimize_black_barley_cycle(
 
 # =====================================================
 # [E] 샬롯맛 쿠키 - 회복량(힐) 최적화
-#  - 목표: "총 회복량" 최대
-#  - tie-break: DPS 높은 쪽
 # =====================================================
 
 # -----------------------------
 # (E-0) 고정 세팅
 # -----------------------------
-CHARLOTTE_FIXED_UNIQUE     = "블랙베리맛 쿠키의 기억"
-CHARLOTTE_FIXED_EQUIP      = "전설의 유령해적 세트"
-CHARLOTTE_FIXED_ARTIFACT   = "희미한 날갯짓"
+CHARLOTTE_FIXED_UNIQUE   = "버터밀크맛 쿠키의 기억"
+CHARLOTTE_FIXED_EQUIP    = "전설의 유령해적 세트"
+CHARLOTTE_FIXED_ARTIFACT = "희미한 날갯짓"
 
 # 잠재 고정
 CHARLOTTE_FIXED_POT = {
@@ -3539,7 +3557,7 @@ BASE_STATS_CHARLOTTE = {
         "crit_dmg": 1.5,
         "armor_pen": 0.0,
         "final_dmg": 0.04,
-        "buff_amp": (0.24 + 0.16),
+        "buff_amp": 0.15 + 0.24,  # 기본 15% + 전용무기 24% (나머지는 build_stats_for_combo에서 합쳐지게)
         "debuff_amp": 0.0,
     }
 }
@@ -3568,30 +3586,32 @@ CHAR_ULT     = (4.26 * 7.0) + 16.33       # 46.15
 
 # 패시브(딜) 근사(기존 근사 유지)
 CHAR_PASSIVE_TRIGGER_INTERVAL = 1.0
-CHAR_PASSIVE_PER_TRIGGER = (2.0 * 3.55) + (9.94 / 3.0)  # 10.413
-CHAR_PASSIVE_COEFF_PER_SEC = CHAR_PASSIVE_PER_TRIGGER / CHAR_PASSIVE_TRIGGER_INTERVAL  # 10.413/s
+CHAR_PASSIVE_PER_TRIGGER      = (2.0 * 3.55) + (9.94 / 3.0)  # 10.413
+CHAR_PASSIVE_COEFF_PER_SEC    = CHAR_PASSIVE_PER_TRIGGER / CHAR_PASSIVE_TRIGGER_INTERVAL  # 10.413/s
 
 # -----------------------------
 # (E-2.5) 아티팩트(희미한 날갯짓) 최소 반영
 # -----------------------------
 CHAR_ARTI_VOID_PASSIVE_MULT = 1.20   # 공허: 패시브 피해 +20%
 CHAR_ARTI_LOSS_PASSIVE_MULT = 1.10   # 유실: 패시브 피해 +10%
-CHAR_ARTI_REPOSE_ELEM_MULT  = 1.25   # 진혼: 모든 속성피해 +25%
+CHAR_ARTI_REPOSE_ELEM_ADD   = 0.25   # 진혼: 모든 속성피해 +25% (가산 축)
 
-CHARLOTTE_APPLY_ELEM_MULT_IN_DAMAGE = True
+# 진혼 buff_all_elem_dmg_raw(가산)
+CHARLOTTE_APPLY_ELEM_MULT_IN_DAMAGE = False
 
 def apply_charlotte_artifact_minimal(stats: Dict[str, float], artifact_name: str) -> Dict[str, float]:
     """샬롯 아티팩트 최소 구현 반영"""
     if artifact_name != "희미한 날갯짓":
         return stats
 
-    # (A) 패시브 피해 배율
+    # (A) 패시브 피해 배율 (패시브에만 적용할 용도)
     stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) \
                                * CHAR_ARTI_VOID_PASSIVE_MULT \
                                * CHAR_ARTI_LOSS_PASSIVE_MULT
 
-    # (B) 모든 속성피해 배율(엔진이 이 키를 쓰면 자동 반영, 아니면 아래 damage쪽에서 곱)
-    stats["elem_dmg_mult"] = float(stats.get("elem_dmg_mult", 1.0)) * CHAR_ARTI_REPOSE_ELEM_MULT
+    # (B) 진혼: 모든 속성 피해 +25% -> 같은 축(가산)에 +로 누적
+    stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + CHAR_ARTI_REPOSE_ELEM_ADD
+
     return stats
 
 # -----------------------------
@@ -3601,11 +3621,12 @@ def apply_charlotte_artifact_minimal(stats: Dict[str, float], artifact_name: str
 CHARLOTTE_PROMO_ENABLED = True
 
 # 패시브 스킬 피해 +100%  => 패시브 항목에 ×2.0
-CHAR_PROMO_PASSIVE_DMG_MULT = 1.0
+# (이미 다른 곳에서 반영 중이면 1.0으로 두세요)
+CHAR_PROMO_PASSIVE_DMG_MULT = 2.0
 
 # 페이트피어서 +1개 생성
 CHAR_FATE_PIERCER_BASE_COUNT = 2
-CHAR_PROMO_EXTRA_PIERCER = 1  # promo on이면 +1
+CHAR_PROMO_EXTRA_PIERCER     = 1  # promo on이면 +1
 
 # 영혼 꿰기 피해 발생 시 아군 회복: 공격력의 10%
 CHAR_SOUL_HEAL_RATIO = 0.10
@@ -3614,23 +3635,16 @@ CHAR_SOUL_HEAL_RATIO = 0.10
 CHAR_PROMO_ULT_HEAL_MULT = 1.20
 
 # -----------------------------------------------------
-# (E-2.9) 영혼 꿰기(패시브 이벤트) 근사 모델
-#  - 실제 수치(지속시간/반응빈도)는 아직 불명 → 기본값/튜닝값으로 둠
+# (E-2.9) 영혼 꿰기(패시브 이벤트) 근사 모델(튜닝값)
 # -----------------------------------------------------
-# "일정시간" 기본값(임시). 실제 값 알면 여기만 바꾸면 됨.
 CHAR_FATE_PIERCER_DURATION = 15.0
+CHAR_FATE_REACTS_PER_SEC   = 1.0
 
-# "필드 위 쿠키의 공격에 반응" 빈도(초당). 파티/보스에 따라 달라서 튜닝값.
-CHAR_FATE_REACTS_PER_SEC = 1.0
-
-# 스택 규칙
 CHAR_SOUL_STACK_PER_HIT = 1
-CHAR_SOUL_STACK_POP = 6
+CHAR_SOUL_STACK_POP     = 6
 
-# 힐 트리거 해석 토글
-# - 문구상 "6회 중첩되면 피해 발생"이 명시되어 있어 POP만 켜두는 걸 추천
-CHAR_HEAL_ON_SOUL_HIT = False   # (A) 피어서 반응 '타격'마다 힐
-CHAR_HEAL_ON_SOUL_POP = True    # (B) 6중첩 '피해' 트리거 때 힐
+CHAR_HEAL_ON_SOUL_HIT = False
+CHAR_HEAL_ON_SOUL_POP = True
 
 def charlotte_soul_counts(total_time: float, promo_on: bool) -> Dict[str, int]:
     """
@@ -3640,11 +3654,12 @@ def charlotte_soul_counts(total_time: float, promo_on: bool) -> Dict[str, int]:
     """
     piercer_cnt = int(CHAR_FATE_PIERCER_BASE_COUNT) + (int(CHAR_PROMO_EXTRA_PIERCER) if promo_on else 0)
     active_time = min(float(CHAR_FATE_PIERCER_DURATION), float(total_time))
-    reacts = max(0.0, float(CHAR_FATE_REACTS_PER_SEC))
+    reacts      = max(0.0, float(CHAR_FATE_REACTS_PER_SEC))
 
     hit_cnt = int(active_time * reacts * piercer_cnt + 1e-9)
-    stacks = hit_cnt * int(CHAR_SOUL_STACK_PER_HIT)
+    stacks  = hit_cnt * int(CHAR_SOUL_STACK_PER_HIT)
     pop_cnt = stacks // int(CHAR_SOUL_STACK_POP)
+
     return {"piercer_cnt": piercer_cnt, "hit_cnt": hit_cnt, "pop_cnt": int(pop_cnt)}
 
 # -----------------------------
@@ -3653,19 +3668,11 @@ def charlotte_soul_counts(total_time: float, promo_on: bool) -> Dict[str, int]:
 CHAR_HEAL_MAIN_RATIO = 0.56     # HP 회복 = 공격력의 56%
 CHAR_HEAL_KNOT_RATIO = 0.112    # [매듭] HP 회복 = 공격력의 11.2%
 
-# 메인 힐 트리거: U(궁극기) 1회
-CHAR_HEAL_MAIN_TOKENS = {"U"}
-
-# [매듭] 힐 주기(가정): 1초 1회
-CHAR_KNOT_INTERVAL_SEC = 1.0
-
+CHAR_HEAL_MAIN_TOKENS  = {"U"}  # 메인 힐 트리거: U 1회
+CHAR_KNOT_INTERVAL_SEC = 1.0    # [매듭] 힐 주기(가정): 1초 1회
 
 def charlotte_cycle_total_time() -> float:
-    t = 0.0
-    for tok in CHAR_CYCLE_TOKENS:
-        t += float(CHAR_TIME.get(tok, 0.0))
-    return t
-
+    return sum(float(CHAR_TIME.get(tok, 0.0)) for tok in CHAR_CYCLE_TOKENS)
 
 def charlotte_calc_final_atk(stats: Dict[str, float]) -> float:
     """
@@ -3692,7 +3699,6 @@ def charlotte_calc_final_atk(stats: Dict[str, float]) -> float:
     final_atk_mult = 1.0 + float(stats.get("final_atk_mult", 0.0))
     return (OA + EA) * atk_mult * final_atk_mult
 
-
 def charlotte_calc_heal_per_cycle(stats: Dict[str, float]) -> Dict[str, float]:
     """
     1사이클 총 회복량(근사)
@@ -3701,9 +3707,8 @@ def charlotte_calc_heal_per_cycle(stats: Dict[str, float]) -> Dict[str, float]:
     - [승급] 영혼 꿰기 피해 발생 시 힐(공격력의 10%) : (트리거 수) * (1 + heal_pct)
     """
     total_time = charlotte_cycle_total_time()
-    final_atk = charlotte_calc_final_atk(stats)
+    final_atk  = charlotte_calc_final_atk(stats)
 
-    # 승급 on/off (템플릿에서 _char_promo_on을 넣어줌)
     promo_on = bool(stats.get("_char_promo_on", 0.0)) and bool(CHARLOTTE_PROMO_ENABLED)
 
     main_cnt = sum(1 for tok in CHAR_CYCLE_TOKENS if tok in CHAR_HEAL_MAIN_TOKENS)
@@ -3713,13 +3718,13 @@ def charlotte_calc_heal_per_cycle(stats: Dict[str, float]) -> Dict[str, float]:
         knot_cnt = int(total_time // CHAR_KNOT_INTERVAL_SEC)
 
     heal_mult = 1.0 + float(stats.get("heal_pct", 0.0))
-    ult_mult = CHAR_PROMO_ULT_HEAL_MULT if promo_on else 1.0
+    ult_mult  = CHAR_PROMO_ULT_HEAL_MULT if promo_on else 1.0
 
     heal_main = final_atk * CHAR_HEAL_MAIN_RATIO * float(main_cnt) * heal_mult * ult_mult
     heal_knot = final_atk * CHAR_HEAL_KNOT_RATIO * float(knot_cnt) * heal_mult
 
-    # [ADD] 영혼 꿰기(패시브 이벤트) 힐
-    soul = charlotte_soul_counts(total_time, promo_on=promo_on)
+    # [승급] 영혼 꿰기 힐
+    soul    = charlotte_soul_counts(total_time, promo_on=promo_on)
     hit_cnt = int(soul["hit_cnt"])
     pop_cnt = int(soul["pop_cnt"])
 
@@ -3730,10 +3735,9 @@ def charlotte_calc_heal_per_cycle(stats: Dict[str, float]) -> Dict[str, float]:
         if CHAR_HEAL_ON_SOUL_POP:
             soul_trig += pop_cnt
 
-    heal_soul = final_atk * CHAR_SOUL_HEAL_RATIO * float(soul_trig) * heal_mult
-
+    heal_soul  = final_atk * CHAR_SOUL_HEAL_RATIO * float(soul_trig) * heal_mult
     total_heal = heal_main + heal_knot + heal_soul
-    hps = total_heal / total_time if total_time > 0 else 0.0
+    hps        = total_heal / total_time if total_time > 0 else 0.0
 
     return {
         "total_time": total_time,
@@ -3752,12 +3756,10 @@ def charlotte_calc_heal_per_cycle(stats: Dict[str, float]) -> Dict[str, float]:
         "promo_on": promo_on,
     }
 
-
 def charlotte_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[str, float]:
     total_time = charlotte_cycle_total_time()
-    unit = base_damage_only(stats)
+    unit       = base_damage_only(stats)
 
-    # 승급 on/off
     promo_on = bool(stats.get("_char_promo_on", 0.0)) and bool(CHARLOTTE_PROMO_ENABLED)
 
     direct = 0.0
@@ -3803,7 +3805,7 @@ def charlotte_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[st
             direct += dmg
             breakdown["ult"] += dmg
 
-    # 패시브: 아티팩트(공허/유실) 배율 + (승급) 패시브 피해 +100% 최소 반영
+    # 패시브: 아티팩트(공허/유실) 배율 + (승급) 패시브 피해 +100%
     passive_mult = float(stats.get("passive_dmg_mult", 1.0))
     if promo_on:
         passive_mult *= float(CHAR_PROMO_PASSIVE_DMG_MULT)
@@ -3819,7 +3821,6 @@ def charlotte_cycle_damage(stats: Dict[str, float], party: List[str]) -> Dict[st
 
     total_damage = direct + passive_total + strike + unique_total
 
-    # 속성피해(진혼) 최소 반영
     if CHARLOTTE_APPLY_ELEM_MULT_IN_DAMAGE:
         total_damage *= float(stats.get("elem_dmg_mult", 1.0))
 
@@ -3847,17 +3848,13 @@ def optimize_char_cycle(
     equip_override: Optional[Union[str, List[str], Tuple[str, ...], set]] = None,  # app.py 호환용
 ) -> Optional[dict]:
     cookie = "샬롯맛 쿠키"
-    base = BASE_STATS_CHARLOTTE[cookie].copy()
+    base   = BASE_STATS_CHARLOTTE[cookie].copy()
 
-    # ---- 고정 세팅 ----
-    equip_name = CHARLOTTE_FIXED_EQUIP
+    equip_name    = CHARLOTTE_FIXED_EQUIP
     artifact_name = CHARLOTTE_FIXED_ARTIFACT
-    pot = CHARLOTTE_FIXED_POT
+    pot           = CHARLOTTE_FIXED_POT
+    unique_name   = CHARLOTTE_FIXED_UNIQUE
 
-    # 샬롯 유니크 고정
-    unique_name = CHARLOTTE_FIXED_UNIQUE
-
-    # equip_override가 들어오면 우선 적용
     if isinstance(equip_override, str) and equip_override.strip():
         equip_name = equip_override.strip()
 
@@ -3868,7 +3865,6 @@ def optimize_char_cycle(
         if allowed and (seaz_name not in allowed):
             seaz_name = allowed[0]
 
-    # ---- shard 후보: 1칸 단위 전수조사 (ea + ap + heal = NORMAL_SLOTS) ----
     NS = int(globals().get("NORMAL_SLOTS", 0) or 0)
     shard_inc = globals().get("SHARD_INC", None)
     if not isinstance(shard_inc, dict):
@@ -3880,15 +3876,10 @@ def optimize_char_cycle(
     for ea in range(NS + 1):
         for ap in range(NS - ea + 1):
             hp = NS - ea - ap
-            shard_candidates.append({
-                "elem_atk": ea,
-                "atk_pct": ap,
-                "heal_pct": hp,
-            })
+            shard_candidates.append({"elem_atk": ea, "atk_pct": ap, "heal_pct": hp})
 
     total = max(1, len(shard_candidates))
-    done = 0
-    tick = max(1, total // 250)
+    tick  = max(1, total // 250)
 
     def emit(p: float) -> None:
         if not progress_cb:
@@ -3901,7 +3892,6 @@ def optimize_char_cycle(
     emit(0.0)
     best: Optional[dict] = None
 
-    # template(설유 0)
     zero_shards = {k: 0 for k in shard_inc.keys()}
 
     template = build_stats_for_combo(
@@ -3930,6 +3920,7 @@ def optimize_char_cycle(
     ap_inc = float(shard_inc.get("atk_pct", 0.0))
     hp_inc = float(shard_inc.get("heal_pct", 0.0))
 
+    done = 0
     for sh in shard_candidates:
         done += 1
         if (done % tick) == 0:
@@ -3944,7 +3935,7 @@ def optimize_char_cycle(
         if not is_valid_by_caps(stats):
             continue
 
-        heal = charlotte_calc_heal_per_cycle(stats)
+        heal  = charlotte_calc_heal_per_cycle(stats)
         cycle = charlotte_cycle_damage(stats, party)
 
         cur = {
