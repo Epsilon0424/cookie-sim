@@ -1021,7 +1021,7 @@ st.markdown("""
 # 레이아웃: 좌/우
 # =====================================================
 with st.container(key="outer_shell", border=False):
-    left_col, right_col = st.columns([0.8, 2.4], gap="small")
+    left_col, right_col = st.columns([0.6, 2.6], gap="small")
 
     # =====================================================
     # 좌측: 선택
