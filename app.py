@@ -1504,7 +1504,7 @@ with st.container(key="outer_shell", border=False):
                             st.caption("스탯 정보가 없습니다.")
                         else:
                             atk_df, crit_df, common_df, skill_df, surv_df, amp_df = build_stat_tables(
-                                best["stats"],
+                                best["stats"], 
                                 best.get("cookie", ""),
                                 best.get("party", st.session_state.party)
                             )
