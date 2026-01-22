@@ -878,28 +878,17 @@ def apply_party_buffs(
 
         stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + 0.10
 
-    # =====================================================
-    # 4) 샬롯 아티팩트 오라(희미한 날갯짓)
-    # =====================================================
-    FIXED_PARTY_ARTIFACT: Dict[str, str] = {
-        "샬롯맛 쿠키": "희미한 날갯짓",
-    }
 
+    # =====================================================
+    # 4) 샬롯 오라(파티에 샬롯이 있으면 무조건 적용)
+    # =====================================================
     def _apply_charlotte_wings_artifact_aura():
-        if main_cookie_name == "샬롯맛 쿠키":
+        # 파티에 샬롯이 없으면 적용 X
+        if not has_char:
             return
 
-        arti_map = party_artifacts or stats.get("party_artifacts") or {}
-        try:
-            char_arti = str(arti_map.get("샬롯맛 쿠키", "")).strip()
-        except Exception:
-            char_arti = ""
-
-        # fallback 제거: 명시적으로 "희미한 날갯짓"일 때만 발동
-        if char_arti != "희미한 날갯짓":
-            return
-
-        stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) * 1.20 * 1.10
+        # 무조건 적용 (아티팩트 이름/메인 여부 체크 제거)
+        stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) * 1.20
         stats["elem_dmg_mult"]    = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
 
     # =====================================================
