@@ -1021,7 +1021,7 @@ st.markdown("""
 # 레이아웃: 좌/우
 # =====================================================
 with st.container(key="outer_shell", border=False):
-    left_col, right_col = st.columns([0.6, 2.6], gap="small")
+    left_col, right_col = st.columns([0.7, 2.5], gap="small")
 
     # =====================================================
     # 좌측: 선택
@@ -1504,7 +1504,7 @@ with st.container(key="outer_shell", border=False):
                             st.caption("스탯 정보가 없습니다.")
                         else:
                             atk_df, crit_df, common_df, skill_df, surv_df, amp_df = build_stat_tables(
-                                best["stats"], 
+                                best["stats"],
                                 best.get("cookie", ""),
                                 best.get("party", st.session_state.party)
                             )
