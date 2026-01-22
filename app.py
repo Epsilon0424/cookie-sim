@@ -5,7 +5,7 @@ import pandas as pd
 import cookie_simulator as sim
 
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
-STEP_FIXED = 3
+STEP_FIXED = 2
 
 def render_table_card(title: str, rows: list[tuple[str, str]]):
     if not rows:
@@ -894,7 +894,21 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     add_if_nonzero(skill_rows, "기본공격 피해", _fmt_pct(_f(stats, "basic_dmg", 0.0)), _f(stats, "basic_dmg", 0.0))
     add_if_nonzero(skill_rows, "특수스킬 피해", _fmt_pct(_f(stats, "special_dmg", 0.0)), _f(stats, "special_dmg", 0.0))
     add_if_nonzero(skill_rows, "궁극기 피해", _fmt_pct(_f(stats, "ult_dmg", 0.0)), _f(stats, "ult_dmg", 0.0))
-    add_if_nonzero(skill_rows, "패시브 피해", _fmt_pct(_f(stats, "passive_dmg", 0.0)), _f(stats, "passive_dmg", 0.0))
+    # 패시브 피해(기본 %) + (적이 받는 패시브 피해 증가) + (패시브 피해 배율)
+    base_passive = float(stats.get("passive_dmg", 0.0))                  # 예: 0.20
+    taken = float(stats.get("enemy_passive_taken_inc", 0.0))             # 예: 0.10 (샬롯 파티효과)
+    p_mult = float(stats.get("passive_dmg_mult", 1.0))                   # 예: 1.20*1.10=1.32
+
+    # 실제 passive 스킬 배율과 동일한 "최종 패시브 배율"
+    final_passive_mult = (1.0 + base_passive) * (1.0 + taken) * p_mult
+
+    final_passive_equiv = final_passive_mult - 1.0
+    add_if_nonzero(skill_rows, "패시브 피해", _fmt_pct(final_passive_equiv), final_passive_equiv)
+
+    # [ADD] 적이 받는 패시브 피해 증가(샬롯 파티효과)
+    taken = float(stats.get("enemy_passive_taken_inc", 0.0))
+    add_if_nonzero(skill_rows, "적이 받는 패시브 피해", _fmt_pct(taken), taken)
+
     skill_df = pd.DataFrame(skill_rows, columns=["항목", "값"])
 
     # =========================
