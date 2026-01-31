@@ -1124,10 +1124,10 @@ with st.container(key="outer_shell", border=False):
                     )
 
             # =====================================================
-            # 2) 샬롯: 해적/대마술사 선택
+            # 2) 샬롯: 대마술사
             # =====================================================
             elif cookie == "샬롯맛 쿠키":
-                charlotte_opts = ["영원의 대마술사 세트","전설의 유령해적 세트"]
+                charlotte_opts = ["영원의 대마술사 세트"]
 
                 if st.session_state.get(ek) not in charlotte_opts:
                     st.session_state[ek] = charlotte_opts[0]
