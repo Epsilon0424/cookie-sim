@@ -410,7 +410,7 @@ def apply_seaz_passive(stats: Dict[str, float], seaz_name: str, uptime_key_prefi
     key = f"{uptime_key_prefix}{seaz_name}"
     u = get_uptime(key)
 
-    # ❌ heal_pct는 버프증폭 미적용
+    # heal_pct는 버프증폭 미적용
     if "heal_pct" in passive:
         stats["heal_pct"] = float(stats.get("heal_pct", 0.0)) + float(passive["heal_pct"]) * u
 
@@ -521,27 +521,23 @@ UNIQUE_SHARDS = {
     "NONE": {"type": "none", "allowed_roles": ["any"], "allowed_types": ["any"]},
 
     # 1) 샬롯맛 쿠키의 기억 (DPS / 사격, 마법)
-    # - 최종피해 +20%
-    # - 공격 적중 시 투사체(쿨 3초), 피해 1000% x2 => 20.0
     "샬롯맛 쿠키의 기억": {
         "type": "charlotte_memory",
         "allowed_roles": ["dps"],
         "allowed_types": ["shoot", "magic"],
         "final_dmg_add": 0.20,
+        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
         "proc_interval": 3.0,
-        "projectile_coeff": 20.0,  # 1000%*2 = 20.0
+        "projectile_coeff": 20.0,
     },
 
     # 2) 다크초코 쿠키의 기억 (DPS / 베기, 타격)
-    # - 최종피해 +20%
-    # - 공격 적중 시 번개(쿨 3초), 번개피해 1400% => 14.0
-    # - 3번 발동마다 2개 추가 생성
-    #   => 기대 번개 개수/발동 = 1 + 2/3 = 5/3
     "다크초코 쿠키의 기억": {
         "type": "dark_choco_memory",
         "allowed_roles": ["dps"],
         "allowed_types": ["slash", "strike"],
         "final_dmg_add": 0.20,
+        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
         "proc_interval": 3.0,
         "lightning_coeff": 14.0,
         "extra_every_n": 3,
@@ -549,37 +545,31 @@ UNIQUE_SHARDS = {
     },
 
     # 3) 선데맛 쿠키의 기억 (STRIKER)
-    # - 속성 표식을 강화 속성 표식으로 변경
-    # - 강화속성표식: 속성 폭발(=속성강타) 피해 30% 증가
     "선데맛 쿠키의 기억": {
         "type": "enhanced_mark",
         "allowed_roles": ["strike"],
         "allowed_types": ["any"],
+        "strike_dmg_add": 0.64,   # [ADD] 기본옵션(파티공유)
         "strike_bonus": 0.30,
     },
 
     # 4) 연금술사맛 쿠키의 기억 (STRIKER)
-    # - 속성강타 발생 시 특제 물약 획득
-    # - 특제 물약: 최종피해 +25% (10초)
-    #  ※ 딜 모델에서는 "업타임"을 가정해야 해서 기본은 ALWAYS로 두고,
-    #     필요하면 UPTIME_CONFIG로 expected_uptime/AVERAGE로 바꿀 수 있게 처리
     "연금술사맛 쿠키의 기억": {
         "type": "alchemist_potion",
         "allowed_roles": ["strike"],
         "allowed_types": ["any"],
+        "strike_dmg_add": 0.64,   # [ADD] 기본옵션(파티공유)
         "final_dmg_add": 0.25,
         "duration": 10.0,
         "uptime_key": "UNIQUE_ALCHEMIST_POTION_FINALDMG_0p25",
     },
 
     # 5) 블랙베리맛 쿠키의 기억 (SUPPORT)
-    # - 궁극기 사용 시 주변 아군 어둠 보호막: 공격력의 60% (12초)  [딜엔 미반영/기록용]
-    # - 아군에게 버프 부여 시 유령 낙인(쿨 15초):
-    #   공격력 12% 증가 (15초)  [딜에는 atk% 버프로 반영]
     "블랙베리맛 쿠키의 기억": {
         "type": "blackberry_support",
         "allowed_roles": ["support"],
         "allowed_types": ["any"],
+        "buff_amp_add": 0.36,     # [ADD] 기본옵션(파티공유)
         "ally_shield_mult": 0.60,
         "ally_shield_duration": 12.0,
         "ally_atk_pct_buff": 0.12,
@@ -589,41 +579,35 @@ UNIQUE_SHARDS = {
     },
 
     # 6) 콜라비맛 쿠키의 기억 (SUPPORT)
-    # - 디버프 부여 시 어둠의 표식(쿨 15초, 지속 15초)
-    #   · 쿠키에게 받는 피해 8% 증가(= dmg_taken_inc +0.08)  [딜에 반영]
-    #   · 소멸 피해 2000% (=20.0)  [EV로 unique_extra_coeff에 반영]
     "콜라비맛 쿠키의 기억": {
         "type": "kohlrabi_support",
         "allowed_roles": ["support"],
         "allowed_types": ["any"],
+        "debuff_amp_add": 0.36,   # [ADD] 기본옵션(파티공유)
         "dmg_taken_inc": 0.08,
         "duration": 15.0,
         "cooldown": 15.0,
-        "expire_coeff": 20.0,  # 2000%
+        "expire_coeff": 20.0,
         "uptime_key": "UNIQUE_KOHLRABI_TAKEN_0p08",
     },
 
     # 7) 버터밀크맛 쿠키의 기억 (SUPPORT)
-    # - 아군 회복 시 검은 축복: 방관 +10% (12초)
-    #   ※ 기존 base_damage_only가 buff_armor_pen_raw를 안 쓰고 있었어서,
-    #      아래 3) 패치에서 반영되게 같이 수정 필요
     "버터밀크맛 쿠키의 기억": {
         "type": "buttermilk_support",
         "allowed_roles": ["support"],
         "allowed_types": ["any"],
+        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
         "armor_pen_add": 0.10,
         "duration": 12.0,
         "uptime_key": "UNIQUE_BUTTERMILK_ARMORPEN_0p10",
     },
 
     # 8) 오래된 샬롯맛 쿠키의 기억 (ANY)
-    # - 궁극기 사용 시 HP 소모(최대HP 20%) -> 보호막/영혼의 기원 획득
-    # - 영혼의 기원(30초): 공격력 +8%, 치피 +12%, 이속 +10%
-    #   ※ 딜에는 atk%/치피만 uptime(30/ult_cd)로 반영
     "오래된 샬롯맛 쿠키의 기억": {
         "type": "old_charlotte",
         "allowed_roles": ["any"],
         "allowed_types": ["any"],
+        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
         "hp_cost_pct": 0.20,
         "shield_duration": 15.0,
         "atk_pct_buff": 0.08,
@@ -633,24 +617,24 @@ UNIQUE_SHARDS = {
     },
 
     # 9) 웨어울프맛 쿠키의 기억 (ANY)
-    # - 궁극기 적중 시(쿨 15초):
-    #   · 적: 회색 늑대 표식(30초) -> 받는 피해 +3%  [딜에 반영]
-    #   · 자신: 푸른 늑대 표식(30초) -> 공격력 +8%, 치피 +12% (이속+10), 받는피해+10(디메리트)
-    #   ※ 딜에는 enemy taken +3%, self atk%/치피만 반영(디메리트는 무시/기록용)
     "웨어울프맛 쿠키의 기억": {
         "type": "werewolf",
         "allowed_roles": ["any"],
         "allowed_types": ["any"],
+        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
         "cooldown": 15.0,
         "duration": 30.0,
         "enemy_taken_inc": 0.03,
         "self_atk_pct_buff": 0.08,
         "self_crit_dmg_buff": 0.12,
-        "self_taken_inc": 0.10,  # 딜엔 미반영(기록용)
-        "self_move_spd_buff": 0.10,  # 기록용
+        "self_taken_inc": 0.10,
+        "self_move_spd_buff": 0.10,
     },
 }
 
+# =====================================================
+# is_unique_allowed
+# =====================================================
 def is_unique_allowed(cookie_name_kr: str, unique_name: str) -> bool:
     u = UNIQUE_SHARDS[unique_name]
     roles = u.get("allowed_roles", ["any"])
@@ -666,7 +650,19 @@ def is_unique_allowed(cookie_name_kr: str, unique_name: str) -> bool:
     type_ok = ("any" in types) or (ctype in types)
     return role_ok and type_ok
 
-def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str) -> None:
+
+# =====================================================
+# apply_unique
+#   - is_owner=True  : 장착자 본인 적용
+#   - is_owner=False : 파티원 유니크를 "공유 stats"에 합산 (본인전용 기본옵션/효과는 제외)
+# =====================================================
+def apply_unique(
+    stats: Dict[str, float],
+    cookie_name_kr: str,
+    unique_name: str,
+    *,
+    is_owner: bool = True,
+) -> None:
     if unique_name not in UNIQUE_SHARDS:
         return
 
@@ -678,21 +674,57 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
     if not is_unique_allowed(cookie_name_kr, unique_name):
         return
 
+    # ---- 안전키 ----
     stats.setdefault("unique_extra_coeff", 0.0)
     stats.setdefault("buff_armor_pen_raw", 0.0)
     stats.setdefault("buff_atk_pct_raw", 0.0)
     stats.setdefault("buff_crit_dmg_raw", 0.0)
     stats.setdefault("buff_all_elem_dmg_raw", 0.0)
 
-    # "아군에게 부여" 버프일 때만, 그리고 (atk/crit_dmg/all_elem_dmg)일 때만 buff_amp 적용
+    stats.setdefault("element_strike_dmg", 0.0)
+    stats.setdefault("final_dmg", 0.0)
+
+    stats.setdefault("buff_amp", 0.0)
+    stats.setdefault("debuff_amp", 0.0)
+    stats.setdefault("party_buff_amp_total", float(stats.get("buff_amp", 0.0)))
+    stats.setdefault("party_debuff_amp_total", float(stats.get("debuff_amp", 0.0)))
+
+    # (1) 속성강타피해 기본옵션: 파티 전체
+    sd_add = float(u.get("strike_dmg_add", 0.0))
+    if sd_add:
+        stats["element_strike_dmg"] = float(stats.get("element_strike_dmg", 0.0)) + sd_add
+
+    # (2) 버프증폭 기본옵션: 파티 전체 (party_total 동기화)
+    ba_add = float(u.get("buff_amp_add", 0.0))
+    if ba_add:
+        stats["buff_amp"] = float(stats.get("buff_amp", 0.0)) + ba_add
+        stats["party_buff_amp_total"] = float(stats.get("party_buff_amp_total", 0.0)) + ba_add
+
+    # (3) 디버프증폭 기본옵션: 파티 전체 (party_total 동기화)
+    da_add = float(u.get("debuff_amp_add", 0.0))
+    if da_add:
+        stats["debuff_amp"] = float(stats.get("debuff_amp", 0.0)) + da_add
+        stats["party_debuff_amp_total"] = float(stats.get("party_debuff_amp_total", 0.0)) + da_add
+
+    # (4) 최종피해 기본옵션: 본인만
+    fd_add = float(u.get("final_dmg_add", 0.0))
+    if fd_add and is_owner:
+        stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + fd_add
+
+    # "아군에게 부여" 버프일 때만 buff_amp 적용
     BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
     ally_buff_scale = 1.0 + BA
 
+    # =====================================================
+    # 타입별 효과 처리
+    # =====================================================
+
     # -----------------------
-    # DPS 유니크
+    # DPS 유니크 (본인만)
     # -----------------------
     if ut == "charlotte_memory":
-        stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + float(u.get("final_dmg_add", 0.0))
+        if not is_owner:
+            return
         interval = float(u.get("proc_interval", 3.0))
         coeff = float(u.get("projectile_coeff", 0.0))
         if interval > 0 and coeff > 0:
@@ -700,7 +732,8 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
         return
 
     if ut == "dark_choco_memory":
-        stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + float(u.get("final_dmg_add", 0.0))
+        if not is_owner:
+            return
         interval = float(u.get("proc_interval", 3.0))
         base_coeff = float(u.get("lightning_coeff", 0.0))
         extra_every = float(u.get("extra_every_n", 3))
@@ -715,37 +748,42 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
 
     # -----------------------
     # STRIKER 유니크
+    #  - strike_dmg_add(기본옵션)은 파티공유로 위에서 이미 반영됨
+    #  - 강화표식/물약 효과는 본인만
     # -----------------------
     if ut == "enhanced_mark":
+        if not is_owner:
+            return
         stats["element_strike_dmg"] = float(stats.get("element_strike_dmg", 0.0)) + float(u.get("strike_bonus", 0.0))
         return
 
     if ut == "alchemist_potion":
-        # final_dmg는 버프증폭 적용 대상 아님 + 보통 self 버프
+        if not is_owner:
+            return
         key = str(u.get("uptime_key", "UNIQUE_ALCHEMIST_POTION_FINALDMG_0p25"))
-        up = get_uptime(key)
+        up = float(get_uptime(key))
         add_fd = float(u.get("final_dmg_add", 0.0))
-        stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + add_fd * up
+        if add_fd:
+            stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + add_fd * up
         return
 
     # -----------------------
-    # SUPPORT 유니크
+    # SUPPORT 유니크 (파티공유)
     # -----------------------
     if ut == "blackberry_support":
         stats["_ally_dark_shield_mult"] = float(u.get("ally_shield_mult", 0.0))
         stats["_ally_dark_shield_dur"]  = float(u.get("ally_shield_duration", 0.0))
 
-        # 아군 공격력 버프 -> buff_amp 적용 대상 (atk_pct)
         key = str(u.get("uptime_key", "UNIQUE_BLACKBERRY_ALLY_ATK_0p12"))
-        up = get_uptime(key)
+        up = float(get_uptime(key))
         atk = float(u.get("ally_atk_pct_buff", 0.0))
         stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + atk * up * ally_buff_scale
         return
 
     if ut == "kohlrabi_support":
-        # 받는 피해 증가는 디버프증폭/버프증폭 모두 미적용 (요청 룰)
+        # 받는 피해 증가는 증폭 미적용
         key = str(u.get("uptime_key", "UNIQUE_KOHLRABI_TAKEN_0p08"))
-        up = get_uptime(key)
+        up = float(get_uptime(key))
         taken = float(u.get("dmg_taken_inc", 0.0))
         stats["dmg_taken_inc"] = float(stats.get("dmg_taken_inc", 0.0)) + taken * up
 
@@ -756,23 +794,25 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
         return
 
     if ut == "buttermilk_support":
-        # 방관은 버프증폭 대상 아님
+        # 방관 버프는 파티공유 (buff_amp 미적용)
         key = str(u.get("uptime_key", "UNIQUE_BUTTERMILK_ARMORPEN_0p10"))
-        up = get_uptime(key)
+        up = float(get_uptime(key))
         ap = float(u.get("armor_pen_add", 0.0))
         stats["buff_armor_pen_raw"] = float(stats.get("buff_armor_pen_raw", 0.0)) + ap * up
         return
 
     # -----------------------
     # ANY 유니크
+    #  - 대부분 본인만
     # -----------------------
     if ut == "old_charlotte":
+        if not is_owner:
+            return
         dur = float(u.get("duration", 30.0))
         ult_cd = float(ULT_COOLDOWN.get(cookie_name_kr, 30.0))
         up = clamp(dur / ult_cd, 0.0, 1.0) if ult_cd > 0 else 1.0
 
-        # "자신에게만" 버프 -> buff_amp 미적용
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(u.get("atk_pct_buff", 0.0)) * up
+        stats["buff_atk_pct_raw"]  = float(stats.get("buff_atk_pct_raw", 0.0))  + float(u.get("atk_pct_buff", 0.0)) * up
         stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + float(u.get("crit_dmg_buff", 0.0)) * up
 
         stats["_old_charlotte_hp_cost_pct"] = float(u.get("hp_cost_pct", 0.0))
@@ -785,17 +825,22 @@ def apply_unique(stats: Dict[str, float], cookie_name_kr: str, unique_name: str)
         cd = float(u.get("cooldown", 15.0))
         up = clamp(dur / cd, 0.0, 1.0) if cd > 0 else 1.0
 
-        # 받는 피해 증가는 증폭 미적용
+        # 적 받피증은 파티공유 가능
         stats["dmg_taken_inc"] = float(stats.get("dmg_taken_inc", 0.0)) + float(u.get("enemy_taken_inc", 0.0)) * up
 
-        # self 버프 -> buff_amp 미적용
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(u.get("self_atk_pct_buff", 0.0)) * up
-        stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + float(u.get("self_crit_dmg_buff", 0.0)) * up
+        # 자기 버프는 본인만
+        if is_owner:
+            stats["buff_atk_pct_raw"]  = float(stats.get("buff_atk_pct_raw", 0.0))  + float(u.get("self_atk_pct_buff", 0.0)) * up
+            stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + float(u.get("self_crit_dmg_buff", 0.0)) * up
 
-        stats["_werewolf_self_taken_inc"] = float(u.get("self_taken_inc", 0.0))
-        stats["_werewolf_self_move_spd"]  = float(u.get("self_move_spd_buff", 0.0))
+            stats["_werewolf_self_taken_inc"] = float(u.get("self_taken_inc", 0.0))
+            stats["_werewolf_self_move_spd"]  = float(u.get("self_move_spd_buff", 0.0))
         return
 
+
+# =====================================================
+# apply_party_buffs
+# =====================================================
 def apply_party_buffs(
     stats: dict,
     party: List[str],
@@ -817,20 +862,19 @@ def apply_party_buffs(
     stats.setdefault("element_strike_dmg", 0.0)
     stats.setdefault("buff_armor_pen_raw", 0.0)
 
-    # 방깎 관련 키(어느 쪽을 계산부가 쓰든 먹게 안전)
+    # 방깎 관련 키
     stats.setdefault("def_reduction_raw", 0.0)
     stats.setdefault("enemy_def_down_raw", 0.0)
 
-    # 곱셈 누적 방지: 매 호출마다 초기화
+    # 곱셈 누적 방지
     stats["passive_dmg_mult"] = 1.0
     stats["elem_dmg_mult"] = 1.0
 
-    # (중요) 스케일 계산이 party_*_amp_total을 우선 참조할 수 있으니
-    # 없으면 현재 buff_amp/debuff_amp로 항상 생성해둠
+    # 스케일 계산용 total 키 보장
     stats.setdefault("party_buff_amp_total", float(stats.get("buff_amp", 0.0)))
     stats.setdefault("party_debuff_amp_total", float(stats.get("debuff_amp", 0.0)))
 
-    # 중복 적용 방지 세트: 매 호출마다 새로
+    # 중복 적용 방지
     applied = set()
     stats["_applied_party_buffs"] = applied
 
@@ -854,32 +898,7 @@ def apply_party_buffs(
     has_char = in_party_char or (main_cookie_name == "샬롯맛 쿠키")
 
     # =====================================================
-    # [유틸] 세트명 가져오기
-    # =====================================================
-    def _get_equipped_set(cookie_name: str) -> str:
-        # 1) party_sets dict (추천)
-        m = stats.get("party_sets")
-        if isinstance(m, dict):
-            v = m.get(cookie_name, "")
-            if v and v != "NONE":
-                return str(v)
-
-        # 2) 쿠키별 개별 키
-        k = f"equip_set__{cookie_name}"
-        v2 = stats.get(k, "")
-        if v2 and v2 != "NONE":
-            return str(v2)
-
-        # 3) 메인 쿠키 전용(혹시 메인에만 저장하는 구조면)
-        if cookie_name == main_cookie_name:
-            v3 = stats.get("equip_set") or stats.get("set_name") or ""
-            if v3 and v3 != "NONE":
-                return str(v3)
-
-        return ""
-
-    # =====================================================
-    # [유틸] 세트효과 가져오기 (있으면 DB, 없으면 fallback)
+    # [유틸] 세트효과 가져오기
     # =====================================================
     def _get_set_effect_base(set_name: str, fallback: dict) -> dict:
         try:
@@ -899,19 +918,16 @@ def apply_party_buffs(
     }
 
     def _get_party_set_name(cookie_name: str) -> str:
-        # 1) 전달된 party_sets 우선
         m = stats.get("party_sets")
         if isinstance(m, dict):
             v = m.get(cookie_name, "")
             if v and v != "NONE":
                 return str(v)
 
-        # 2) 개별 키
         v2 = stats.get(f"equip_set__{cookie_name}", "")
         if v2 and v2 != "NONE":
             return str(v2)
 
-        # 3) 파티원인데 정보가 없으면 고정세트 fallback
         if cookie_name in (party or []) and cookie_name != main_cookie_name:
             return FIXED_PARTY_SETS.get(cookie_name, "")
 
@@ -926,8 +942,6 @@ def apply_party_buffs(
         return total
 
     # (A) 선반영(증폭만)
-    #  - 샬롯(영원의 대마술사) buff_amp: 모자 unique(0.15) + 세트효과(0.15) = 0.30
-    #  - 윈파 debuff_amp는 다른 경로 합산이라 여기서는 안 더함
     def _apply_party_auto_sets_pre_scale():
         if in_party_char and (main_cookie_name != "샬롯맛 쿠키"):
             char_set = _get_party_set_name("샬롯맛 쿠키")
@@ -950,11 +964,10 @@ def apply_party_buffs(
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
 
     buff_scale = 1.0 + BA
-    debuff_scale = 1.0 + DA  # 유지
+    debuff_scale = 1.0 + DA  # (현재 흐름 유지)
 
     # =====================================================
-    # (B) 실제 세트효과 적용: 스케일 "미적용" (그냥 더함)
-    #  ※ 여기서도 반드시 _get_party_set_name()을 써야 파티원 fallback이 먹음!
+    # (B) 실제 세트효과 적용: 스케일 "미적용"
     # =====================================================
     def _apply_party_auto_sets_post_scale_no_scaling():
         # --- 이슬(서포터): 해적셋 ---
@@ -973,24 +986,10 @@ def apply_party_buffs(
                     stats["def_reduction_raw"] = float(stats.get("def_reduction_raw", 0.0)) + add_def
                     stats["enemy_def_down_raw"] = float(stats.get("enemy_def_down_raw", 0.0)) + add_def
 
-        # --- 샬롯(서포터): 선택 세트 분기 ---
+        # --- 샬롯(서포터): 영원의 대마술사 세트만 적용 ---
         if in_party_char and (main_cookie_name != "샬롯맛 쿠키"):
-            char_set = _get_party_set_name("샬롯맛 쿠키")
-
-            if char_set == "전설의 유령해적 세트":
-                base = _get_set_effect_base(
-                    "전설의 유령해적 세트",
-                    fallback={"all_elem_dmg": 0.30, "def_reduction_raw": 0.10},
-                )
-                add_elem = float(base.get("all_elem_dmg", 0.0))
-                add_def = float(base.get("def_reduction_raw", 0.0))
-                if add_elem:
-                    stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + add_elem
-                if add_def:
-                    stats["def_reduction_raw"] = float(stats.get("def_reduction_raw", 0.0)) + add_def
-                    stats["enemy_def_down_raw"] = float(stats.get("enemy_def_down_raw", 0.0)) + add_def
-
-            elif char_set == "영원의 대마술사 세트":
+            char_set = _get_party_set_name("샬롯맛 쿠키") or "영원의 대마술사 세트"
+            if char_set == "영원의 대마술사 세트":
                 base = _get_set_effect_base(
                     "영원의 대마술사 세트",
                     fallback={"buff_amp": 0.15, "all_elem_dmg": 0.30},
@@ -998,8 +997,6 @@ def apply_party_buffs(
                 add_elem = float(base.get("all_elem_dmg", 0.0))
                 if add_elem:
                     stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + add_elem
-            else:
-                pass
 
         # --- 윈파(서포터): 황금예복 속강타만 ---
         if in_party_wind and (main_cookie_name != "윈드파라거스 쿠키"):
@@ -1035,9 +1032,6 @@ def apply_party_buffs(
         u_bond = 1.0
         stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + (0.392 * u_bond)
 
-        u_requiem = 1.0
-        stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + (0.25 * u_requiem * buff_scale)
-
         stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + 0.10
 
     # =====================================================
@@ -1070,6 +1064,7 @@ def apply_party_buffs(
 
     # =====================================================
     # 7) 파티원 유니크 설유 효과 합산
+    #   - 핵심: 파티원 유니크는 is_owner=False 로 넣기
     # =====================================================
     FIXED_PARTY_UNIQUE: Dict[str, str] = {
         "이슬맛 쿠키": "버터밀크맛 쿠키의 기억",
@@ -1095,12 +1090,16 @@ def apply_party_buffs(
         if (not u_name) or (u_name == "NONE"):
             return
 
+        # [FIX] buff_amp/debuff_amp 임시 세팅 + 파티원 유니크는 is_owner=False
         orig_ba = float(stats.get("buff_amp", 0.0))
+        orig_da = float(stats.get("debuff_amp", 0.0))
         try:
             stats["buff_amp"] = float(stats.get("party_buff_amp_total", orig_ba))
-            apply_unique(stats, cookie_name, u_name)
+            stats["debuff_amp"] = float(stats.get("party_debuff_amp_total", orig_da))
+            apply_unique(stats, cookie_name, u_name, is_owner=False)  # ★ 여기!!
         finally:
             stats["buff_amp"] = orig_ba
+            stats["debuff_amp"] = orig_da
 
     # =====================================================
     # 8) 적용 순서
