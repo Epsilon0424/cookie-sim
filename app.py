@@ -1085,31 +1085,76 @@ with st.container(key="outer_shell", border=False):
             st.markdown('<div class="ctl-label">장비 선택 모드</div>', unsafe_allow_html=True)
 
             mode_opts = ["최적(자동)", "선택(수동)"]
-            if st.session_state.get(mk, "") not in mode_opts:
+
+            # 세션 기본값 보장
+            if st.session_state.get(mk) not in mode_opts:
                 st.session_state[mk] = mode_opts[0]
 
-            mode = st.selectbox("장비 선택 모드", mode_opts, label_visibility="collapsed", key=mk)
+            # 항상 mode가 정의되도록: selectbox 결과를 바로 mode로 받음
+            mode: str = st.selectbox(
+                "장비 선택 모드",
+                mode_opts,
+                label_visibility="collapsed",
+                key=mk,
+            )
             st.session_state.mode = mode
 
-            equip_override = None
+            equip_override = None  # 기본
 
-            # 샬롯/이슬은 장비를 해적셋으로 고정
-            if cookie in ("이슬맛 쿠키", "샬롯맛 쿠키"):
+            # =====================================================
+            # 1) 이슬: 해적셋 고정
+            # =====================================================
+            if cookie == "이슬맛 쿠키":
                 fixed_opts = ["전설의 유령해적 세트"]
 
-                if st.session_state.get(ek, "") not in fixed_opts:
+                if st.session_state.get(ek) not in fixed_opts:
                     st.session_state[ek] = fixed_opts[0]
+
                 st.session_state.equip = fixed_opts[0]
                 equip_override = fixed_opts[0]
 
                 if mode == "선택(수동)":
                     st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
-                    st.selectbox("장비 선택", fixed_opts, label_visibility="collapsed", key=ek, disabled=True)
+                    st.selectbox(
+                        "장비 선택",
+                        fixed_opts,
+                        label_visibility="collapsed",
+                        key=ek,
+                        disabled=True,
+                    )
 
-            else:
-                # 나머지는 기존 로직 그대로 (최적/선택 모드)
+            # =====================================================
+            # 2) 샬롯: 해적/대마술사 선택
+            # =====================================================
+            elif cookie == "샬롯맛 쿠키":
+                charlotte_opts = ["영원의 대마술사 세트","전설의 유령해적 세트"]
+
+                if st.session_state.get(ek) not in charlotte_opts:
+                    st.session_state[ek] = charlotte_opts[0]
+
                 if mode == "선택(수동)":
                     st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
+                    equip = st.selectbox(
+                        "장비 선택",
+                        charlotte_opts,
+                        label_visibility="collapsed",
+                        key=ek,
+                    )
+                else:
+                    # 자동 모드: 현재 선택값 유지
+                    equip = st.session_state.get(ek, charlotte_opts[0])
+
+                st.session_state.equip = equip
+                equip_override = equip
+
+            # =====================================================
+            # 3) 나머지: 기존 로직 (수동이면 선택, 자동이면 None)
+            # =====================================================
+            else:
+                if mode == "선택(수동)":
+                    st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
+
+                    equip_options = [""]
 
                     if cookie == "윈드파라거스 쿠키":
                         equip_options = (getattr(sim, "wind_allowed_equips", lambda: [""])() or [""])
@@ -1117,18 +1162,22 @@ with st.container(key="outer_shell", border=False):
                         equip_options = (getattr(sim, "melan_allowed_equips", lambda: [""])() or [""])
                     elif cookie == "흑보리맛 쿠키":
                         equip_options = (getattr(sim, "black_barley_allowed_equips", lambda: [""])() or [""])
-                    else:
-                        pass
 
-                    if st.session_state.get(ek, "") not in equip_options:
+                    if st.session_state.get(ek) not in equip_options:
                         st.session_state[ek] = equip_options[0]
 
-                    equip = st.selectbox("장비 선택", equip_options, label_visibility="collapsed", key=ek)
+                    equip = st.selectbox(
+                        "장비 선택",
+                        equip_options,
+                        label_visibility="collapsed",
+                        key=ek,
+                    )
                     st.session_state.equip = equip
                     equip_override = equip
                 else:
                     st.session_state.equip = ""
                     equip_override = None
+
 
             # =====================================================
             # 시즈나이트/파티
@@ -1293,8 +1342,7 @@ with st.container(key="outer_shell", border=False):
                 best = None
                 best_kind = None
 
-                # 핵심 수정: 수동모드가 아니어도 session_state.equip 이 있으면 override로 넘김
-                # - 샬롯/이슬은 UI에서 해적셋 고정이라 st.session_state.equip에 값이 들어가 있음
+                # 수정: 수동모드가 아니어도 session_state.equip 이 있으면 override로 넘김
                 equip_override_local = st.session_state.equip or None
 
                 if kind_cookie == "wind":
@@ -1365,22 +1413,25 @@ with st.container(key="outer_shell", border=False):
 
                 # -----------------------------------------------------
                 # 이슬/샬롯: 유니크 + 설탕유리조각 "자동으로 뽑기"
-                # - sim에 함수가 있으면 그걸 쓰고,
-                # - 없으면(=아직 구현 안했으면) 그냥 비워둠
                 # -----------------------------------------------------
                 if isinstance(best, dict) and best_kind in ("isle", "char"):
                     # 장비 고정 보강 (표시/저장용)
                     if best_kind == "isle":
                         best.setdefault("equip_fixed", "전설의 유령해적 세트")
                         best.setdefault("artifact_fixed", "비에 젖은 과거")
+                        equip_for_support = "전설의 유령해적 세트"
+                        cookie_name = "이슬맛 쿠키"
                     else:
-                        best.setdefault("equip", "전설의 유령해적 세트")
+                        # 샬롯은 대마술사 고정
+                        best.setdefault("equip", "영원의 대마술사 세트")
+                        equip_for_support = "영원의 대마술사 세트"
+                        cookie_name = "샬롯맛 쿠키"
 
                     # 1) 유니크 자동 선택
                     pick_unique = getattr(sim, "pick_best_support_unique", None)
                     if callable(pick_unique):
                         u = pick_unique(
-                            cookie_kr=("이슬맛 쿠키" if best_kind == "isle" else "샬롯맛 쿠키"),
+                            cookie_kr=cookie_name,
                             party=st.session_state.party,
                         )
                         if u and (not best.get("unique")):
@@ -1390,9 +1441,9 @@ with st.container(key="outer_shell", border=False):
                     pick_shards = getattr(sim, "pick_best_support_shards", None)
                     if callable(pick_shards):
                         sh = pick_shards(
-                            cookie_kr=("이슬맛 쿠키" if best_kind == "isle" else "샬롯맛 쿠키"),
+                            cookie_kr=cookie_name,
                             party=st.session_state.party,
-                            equip="전설의 유령해적 세트",
+                            equip=equip_for_support,   # 샬롯 대마술사 세트로 전달
                         )
                         if isinstance(sh, dict) and (not best.get("shards")):
                             best["shards"] = sh
