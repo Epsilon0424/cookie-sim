@@ -403,24 +403,20 @@ def apply_seaz_passive(stats: Dict[str, float], seaz_name: str, uptime_key_prefi
 
     passive = info.get("passive", {}) or {}
 
-    # 버프증폭은 "아군 버프" 중 atk_pct / ally_all_elem_dmg 에만 적용
-    BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp_total", stats.get("buff_amp", 0.0))))
-    buff_scale = 1.0 + BA
-
     key = f"{uptime_key_prefix}{seaz_name}"
     u = get_uptime(key)
 
-    # heal_pct는 버프증폭 미적용
+    # heal_pct (시즈) : 벞증 영향 없음
     if "heal_pct" in passive:
         stats["heal_pct"] = float(stats.get("heal_pct", 0.0)) + float(passive["heal_pct"]) * u
 
-    # ally_all_elem_dmg는 버프증폭 적용
+    # ally_all_elem_dmg (시즈) : 벞증 영향 없음
     if "ally_all_elem_dmg" in passive:
-        stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + float(passive["ally_all_elem_dmg"]) * u * buff_scale
+        stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + float(passive["ally_all_elem_dmg"]) * u
 
-    # atk_pct는 버프증폭 적용
+    # atk_pct (시즈) : 벞증 영향 없음
     if "atk_pct" in passive:
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(passive["atk_pct"]) * u * buff_scale
+        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(passive["atk_pct"]) * u
 
     return stats
 
@@ -525,8 +521,7 @@ UNIQUE_SHARDS = {
         "type": "charlotte_memory",
         "allowed_roles": ["dps"],
         "allowed_types": ["shoot", "magic"],
-        "final_dmg_add": 0.20,
-        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
+        "final_dmg_add": 0.56,    # [ADD] 기본옵션(본인만)
         "proc_interval": 3.0,
         "projectile_coeff": 20.0,
     },
@@ -536,8 +531,7 @@ UNIQUE_SHARDS = {
         "type": "dark_choco_memory",
         "allowed_roles": ["dps"],
         "allowed_types": ["slash", "strike"],
-        "final_dmg_add": 0.20,
-        "final_dmg_add": 0.36,    # [ADD] 기본옵션(본인만)
+        "final_dmg_add": 0.56,    # [ADD] 기본옵션(본인만)
         "proc_interval": 3.0,
         "lightning_coeff": 14.0,
         "extra_every_n": 3,
@@ -711,10 +705,6 @@ def apply_unique(
     if fd_add and is_owner:
         stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + fd_add
 
-    # "아군에게 부여" 버프일 때만 buff_amp 적용
-    BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
-    ally_buff_scale = 1.0 + BA
-
     # =====================================================
     # 타입별 효과 처리
     # =====================================================
@@ -777,7 +767,9 @@ def apply_unique(
         key = str(u.get("uptime_key", "UNIQUE_BLACKBERRY_ALLY_ATK_0p12"))
         up = float(get_uptime(key))
         atk = float(u.get("ally_atk_pct_buff", 0.0))
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + atk * up * ally_buff_scale
+
+        # [RULE] 유니크로 주는 버프는 벞증 영향 없음
+        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + atk * up
         return
 
     if ut == "kohlrabi_support":
@@ -838,9 +830,6 @@ def apply_unique(
         return
 
 
-# =====================================================
-# apply_party_buffs
-# =====================================================
 def apply_party_buffs(
     stats: dict,
     party: List[str],
@@ -859,6 +848,9 @@ def apply_party_buffs(
     stats.setdefault("buff_all_elem_dmg_raw", 0.0)
 
     stats.setdefault("final_atk_mult", 0.0)
+    stats.setdefault("buff_final_atk_mult", 0.0)
+    stats.setdefault("enemy_passive_taken_inc", 0.0)
+
     stats.setdefault("element_strike_dmg", 0.0)
     stats.setdefault("buff_armor_pen_raw", 0.0)
 
@@ -874,9 +866,11 @@ def apply_party_buffs(
     stats.setdefault("party_buff_amp_total", float(stats.get("buff_amp", 0.0)))
     stats.setdefault("party_debuff_amp_total", float(stats.get("debuff_amp", 0.0)))
 
-    # 중복 적용 방지
-    applied = set()
-    stats["_applied_party_buffs"] = applied
+    # 중복 적용 방지(이 stats 스코프 내에서만)
+    applied = stats.setdefault("_applied_party_buffs", set())
+    if not isinstance(applied, set):
+        applied = set()
+        stats["_applied_party_buffs"] = applied
 
     def _apply_once(tag: str, fn: Callable[[], None]):
         if tag in applied:
@@ -909,7 +903,7 @@ def apply_party_buffs(
             return fallback
 
     # =====================================================
-    # 2) [ADD] 파티 자동 세트효과
+    # 2) 파티 자동 세트효과
     # =====================================================
     FIXED_PARTY_SETS: Dict[str, str] = {
         "이슬맛 쿠키": "전설의 유령해적 세트",
@@ -941,8 +935,11 @@ def apply_party_buffs(
             total += float(u.get("buff_amp", 0.0))
         return total
 
-    # (A) 선반영(증폭만)
+    # -----------------------------------------------------
+    # (A) 선반영(증폭만)  ★ 스케일에 영향을 주는 것만 여기서
+    # -----------------------------------------------------
     def _apply_party_auto_sets_pre_scale():
+        # 샬롯(서포터) - 영원의 대마술사 세트: buff_amp(스케일 영향) 선반영
         if in_party_char and (main_cookie_name != "샬롯맛 쿠키"):
             char_set = _get_party_set_name("샬롯맛 쿠키")
             if char_set == "영원의 대마술사 세트":
@@ -964,7 +961,7 @@ def apply_party_buffs(
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
 
     buff_scale = 1.0 + BA
-    debuff_scale = 1.0 + DA  # (현재 흐름 유지)
+    debuff_scale = 1.0 + DA
 
     # =====================================================
     # (B) 실제 세트효과 적용: 스케일 "미적용"
@@ -979,14 +976,15 @@ def apply_party_buffs(
                     fallback={"all_elem_dmg": 0.30, "def_reduction_raw": 0.10},
                 )
                 add_elem = float(base.get("all_elem_dmg", 0.0))
-                add_def = float(base.get("def_reduction_raw", 0.0))
+                add_def  = float(base.get("def_reduction_raw", 0.0))
                 if add_elem:
                     stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + add_elem
                 if add_def:
-                    stats["def_reduction_raw"] = float(stats.get("def_reduction_raw", 0.0)) + add_def
+                    stats["def_reduction_raw"]  = float(stats.get("def_reduction_raw", 0.0)) + add_def
                     stats["enemy_def_down_raw"] = float(stats.get("enemy_def_down_raw", 0.0)) + add_def
 
-        # --- 샬롯(서포터): 영원의 대마술사 세트만 적용 ---
+        # --- 샬롯(서포터): 영원의 대마술사 세트 ---
+        # buff_amp는 pre-scale에서 이미 반영했으니 post-scale에서 또 더하지 말 것(중복 방지)
         if in_party_char and (main_cookie_name != "샬롯맛 쿠키"):
             char_set = _get_party_set_name("샬롯맛 쿠키") or "영원의 대마술사 세트"
             if char_set == "영원의 대마술사 세트":
@@ -1018,30 +1016,70 @@ def apply_party_buffs(
     def _apply_isle_buffs():
         if main_cookie_name == "이슬맛 쿠키":
             return
-        u_cd = float(get_uptime("PARTY_ISLE_CRITDMG_0p56"))
-        stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.56 * u_cd * buff_scale)
 
+        BA_total = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
+        innate_scale = 1.0 + BA_total
+
+        # (기존) 파티 치피 +56%  → 이제 벞증 영향 "있음"
+        u_cd = float(get_uptime("PARTY_ISLE_CRITDMG_0p56"))
+        stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.56 * u_cd * innate_scale)
+
+        # (기존) 파티 최종공 +22.4% → 이제 벞증 영향 "있음" (final_atk_mult로 유지)
         u_atk = float(get_uptime("PARTY_ISLE_ATK_0p224"))
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + (0.224 * u_atk * buff_scale)
+        add_final_atk = 0.224 * u_atk * innate_scale
+
+        stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + add_final_atk
+        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + add_final_atk  # 표시용
+
+        # =====================================================
+        # [ADD] 이슬 "쿠키 고유 버프" (벞증 적용)
+        # 1) 흘러가는 인연 + 물그림자 피해 증가 20%
+        # 2) 투명한 거래 기본공격피해 +5%
+        # 3) 여로의 끝 기본공격피해 +5%
+        # =====================================================
+
+        # 2) + 3) 기본공격 피해 +10% (벞증 적용)
+        stats["basic_dmg"] = float(stats.get("basic_dmg", 0.0)) + (0.10 * innate_scale)
+
+        # 1) 피해 증가 20% (벞증 적용)
+        # ※ 여기서는 "특수/궁극기 피해"로 매핑
+        stats["special_dmg"] = float(stats.get("special_dmg", 0.0)) + (0.20 * innate_scale)
+        stats["ult_dmg"]     = float(stats.get("ult_dmg", 0.0))     + (0.20 * innate_scale)
 
     def _apply_wind_party_effects():
         u = float(get_uptime("PARTY_WIND_CRITDMG_0p40"))
-        stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.40 * u * buff_scale)
+        # [RULE] 윈파 파티버프는 벞증 영향 없음
+        stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.40 * u)
 
     def _apply_charlotte_party_effects():
+        if main_cookie_name == "샬롯맛 쿠키":
+            return
+
+        # [RULE] 버프증폭은 "쿠키 고유 버프"에만 적용
+        BA_total = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
+        innate_scale = 1.0 + BA_total
+
         u_bond = 1.0
-        stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + (0.392 * u_bond)
 
-        stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + 0.10
+        # (1) 결속 공증 39.2%  (벞증 적용)
+        add_final_atk = 0.392 * u_bond * innate_scale
+        stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + add_final_atk
+        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + add_final_atk  # 표시용
 
+        # (2) 운명의 바느질 패시브 피해 +5% (벞증 적용)
+        stats["passive_dmg"] = float(stats.get("passive_dmg", 0.0)) + (0.05 * innate_scale)
+
+        # (3) 결속 패시브 피해 +5% (벞증 적용)
+        stats["enemy_passive_taken_inc"] = float(stats.get("enemy_passive_taken_inc", 0.0)) + (0.05 * innate_scale)
+        
     # =====================================================
-    # 5) 샬롯 오라(파티에 샬롯이 있으면 무조건 적용)
+    # 5) 샬롯 오라
     # =====================================================
     def _apply_charlotte_wings_artifact_aura():
         if not has_char:
             return
         stats["passive_dmg_mult"] = float(stats.get("passive_dmg_mult", 1.0)) * 1.20
-        stats["elem_dmg_mult"] = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
+        stats["elem_dmg_mult"]    = float(stats.get("elem_dmg_mult", 1.0)) * 1.25
 
     # =====================================================
     # 6) 파티원 시즈 패시브 합산
@@ -1064,7 +1102,6 @@ def apply_party_buffs(
 
     # =====================================================
     # 7) 파티원 유니크 설유 효과 합산
-    #   - 핵심: 파티원 유니크는 is_owner=False 로 넣기
     # =====================================================
     FIXED_PARTY_UNIQUE: Dict[str, str] = {
         "이슬맛 쿠키": "버터밀크맛 쿠키의 기억",
@@ -1090,20 +1127,28 @@ def apply_party_buffs(
         if (not u_name) or (u_name == "NONE"):
             return
 
-        # [FIX] buff_amp/debuff_amp 임시 세팅 + 파티원 유니크는 is_owner=False
         orig_ba = float(stats.get("buff_amp", 0.0))
         orig_da = float(stats.get("debuff_amp", 0.0))
         try:
-            stats["buff_amp"] = float(stats.get("party_buff_amp_total", orig_ba))
+            stats["buff_amp"]   = float(stats.get("party_buff_amp_total", orig_ba))
             stats["debuff_amp"] = float(stats.get("party_debuff_amp_total", orig_da))
-            apply_unique(stats, cookie_name, u_name, is_owner=False)  # ★ 여기!!
+            apply_unique(stats, cookie_name, u_name, is_owner=False)
         finally:
-            stats["buff_amp"] = orig_ba
+            stats["buff_amp"]   = orig_ba
             stats["debuff_amp"] = orig_da
 
     # =====================================================
     # 8) 적용 순서
+    #  - [중요] 파티 유니크(특히 buff_amp_add)를 먼저 적용해서
+    #           party_buff_amp_total이 확정된 뒤 샬롯 고유버프(innate_scale)를 계산하게 함
     # =====================================================
+
+    # (0) 파티 유니크 먼저
+    _apply_once("PARTY_UNIQUE_ISLE",       lambda: _apply_party_member_unique("이슬맛 쿠키"))
+    _apply_once("PARTY_UNIQUE_CHARLOTTE",  lambda: _apply_party_member_unique("샬롯맛 쿠키"))
+    _apply_once("PARTY_UNIQUE_WIND",       lambda: _apply_party_member_unique("윈드파라거스 쿠키"))
+
+    # (1) 쿠키 파티버프/오라
     if has_char:
         _apply_once("PARTY_CHARLOTTE", _apply_charlotte_party_effects)
         _apply_once("PARTY_CHARLOTTE_WINGS_ARTI", _apply_charlotte_wings_artifact_aura)
@@ -1114,14 +1159,10 @@ def apply_party_buffs(
     if has_wind:
         _apply_once("PARTY_WIND", _apply_wind_party_effects)
 
-    _apply_once("PARTY_SEAZ_ISLE", lambda: _apply_party_member_seaz("이슬맛 쿠키"))
-    _apply_once("PARTY_SEAZ_CHARLOTTE", lambda: _apply_party_member_seaz("샬롯맛 쿠키"))
-    _apply_once("PARTY_SEAZ_WIND", lambda: _apply_party_member_seaz("윈드파라거스 쿠키"))
-
-    _apply_once("PARTY_UNIQUE_ISLE", lambda: _apply_party_member_unique("이슬맛 쿠키"))
-    _apply_once("PARTY_UNIQUE_CHARLOTTE", lambda: _apply_party_member_unique("샬롯맛 쿠키"))
-    _apply_once("PARTY_UNIQUE_WIND", lambda: _apply_party_member_unique("윈드파라거스 쿠키"))
-
+    # (2) 파티 시즈 패시브
+    _apply_once("PARTY_SEAZ_ISLE",       lambda: _apply_party_member_seaz("이슬맛 쿠키"))
+    _apply_once("PARTY_SEAZ_CHARLOTTE",  lambda: _apply_party_member_seaz("샬롯맛 쿠키"))
+    _apply_once("PARTY_SEAZ_WIND",       lambda: _apply_party_member_seaz("윈드파라거스 쿠키"))
     return stats
 
 # =====================================================
@@ -1152,19 +1193,22 @@ def base_damage_only(stats: Dict[str, float]) -> float:
     # [B] 속성 공격력(별도 축)
     EA = float(stats.get("base_elem_atk", 0.0)) + float(stats.get("elem_atk", 0.0))
 
-    # [C+D] 공퍼 축 통합: (base_atk_pct + atk_pct + buff_atk_pct_raw) "전부 합"
+    # [C+D] 공퍼 축 (자체)와 (파티버프) 분리 후 곱
     promo_atk_mult = float(stats.get("promo_atk_pct_mult", 1.0))
 
-    atk_pct_total_add = (
+    self_atk_pct_add = (
         float(stats.get("base_atk_pct", 0.0)) +
-        float(stats.get("atk_pct", 0.0)) +
-        float(stats.get("buff_atk_pct_raw", 0.0))
+        float(stats.get("atk_pct", 0.0))
     )
+    party_atk_pct_buff = float(stats.get("buff_atk_pct_raw", 0.0))
 
-    # 승급만 곱
-    atk_mult = (1.0 + atk_pct_total_add) * promo_atk_mult
+    # (1 + 자체공퍼) * (1 + 파티공퍼버프)
+    atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff)
 
-    # 진짜 곱연산 공격력 버프가 있다면(없으면 1.0)
+    # 승급 배율(곱)
+    atk_mult *= promo_atk_mult
+
+    # 진짜 곱연산 공격력 버프(있으면)
     atk_mult *= float(stats.get("buff_atk_mult", 1.0))
 
     # [E] 최종공
@@ -1230,18 +1274,24 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
     promo_atk_mult   = float(s.get("promo_atk_pct_mult", 1.0))
     promo_final_mult = float(s.get("promo_final_dmg_mult", 1.0))
 
-    atk_pct_total_add = (
+    self_atk_pct_add = (
         float(s.get("base_atk_pct", 0.0)) +
-        float(s.get("atk_pct", 0.0)) +
-        float(s.get("buff_atk_pct_raw", 0.0))
+        float(s.get("atk_pct", 0.0))
     )
+    party_atk_pct_buff = float(s.get("buff_atk_pct_raw", 0.0))
 
-    equip_atk_mult = (1.0 + atk_pct_total_add) * promo_atk_mult
+    # 공퍼는 (자체)×(파티버프)×(승급)
+    equip_atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff) * promo_atk_mult
+
     buff_atk_mult = float(s.get("buff_atk_mult", 1.0))
-
     atk_mult = equip_atk_mult * buff_atk_mult
-    atk_pct_sum = atk_mult - 1.0
-    atk_pct_equiv = atk_pct_sum
+
+    # "등가 공퍼" = 최종 atk_mult - 1
+    atk_pct_equiv = atk_mult - 1.0
+
+    # (표시용으로 쪼개고 싶으면 같이 리턴)
+    # self_atk_pct_add, party_atk_pct_buff 도 numeric에 넣어주면 디버깅 편함
+    atk_pct_sum = atk_pct_equiv
 
     final_atk_mult_add = float(s.get("final_atk_mult", 0.0))
 
@@ -1274,6 +1324,8 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
             "equip_atk_mult": equip_atk_mult,
             "buff_atk_mult": buff_atk_mult,
             "atk_pct_sum": atk_pct_sum,
+            "self_atk_pct_add": self_atk_pct_add,
+            "party_atk_pct_buff": party_atk_pct_buff,
             "atk_pct_equiv": atk_pct_equiv,
             "final_atk_mult_add": final_atk_mult_add,
             "eff_crit_rate": eff_cr,
@@ -1634,7 +1686,13 @@ def build_stats_for_combo(
     stats["debuff_amp_total"] = float(stats.get("debuff_amp", 0.0))
 
     _apply_party_amp_totals(stats, party, cookie_name_kr)
-    apply_party_buffs(stats, party, cookie_name_kr)
+    apply_party_buffs(
+        stats,
+        party,
+        cookie_name_kr,
+        party_artifacts=party_artifacts,
+        party_uniques=party_uniques,
+    )
 
     if seaz_name:
         apply_seaz_passive(stats, seaz_name)
