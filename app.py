@@ -5,7 +5,7 @@ import pandas as pd
 import cookie_simulator as sim
 
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
-STEP_FIXED = 2
+STEP_FIXED = 3
 
 def render_table_card(title: str, rows: list[tuple[str, str]]):
     if not rows:
