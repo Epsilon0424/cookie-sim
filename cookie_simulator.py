@@ -1020,11 +1020,11 @@ def apply_party_buffs(
         BA_total = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
         innate_scale = 1.0 + BA_total
 
-        # (기존) 파티 치피 +56%  → 이제 벞증 영향 "있음"
+        # (기존) 파티 치피 +56%  → 벞증 영향
         u_cd = float(get_uptime("PARTY_ISLE_CRITDMG_0p56"))
         stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.56 * u_cd * innate_scale)
 
-        # (기존) 파티 최종공 +22.4% → 이제 벞증 영향 "있음" (final_atk_mult로 유지)
+        # (기존) 파티 최종공 +22.4% → 벞증 영향(final_atk_mult로 유지)
         u_atk = float(get_uptime("PARTY_ISLE_ATK_0p224"))
         add_final_atk = 0.224 * u_atk * innate_scale
 
@@ -1033,18 +1033,12 @@ def apply_party_buffs(
 
         # =====================================================
         # [ADD] 이슬 "쿠키 고유 버프" (벞증 적용)
-        # 1) 흘러가는 인연 + 물그림자 피해 증가 20%
-        # 2) 투명한 거래 기본공격피해 +5%
-        # 3) 여로의 끝 기본공격피해 +5%
+        # 1) 투명한 거래 기본공격피해 +5%
+        # 2) 여로의 끝 기본공격피해 +5%
         # =====================================================
 
-        # 2) + 3) 기본공격 피해 +10% (벞증 적용)
+        # 1) + 2) 기본공격 피해 +10% (벞증 적용)
         stats["basic_dmg"] = float(stats.get("basic_dmg", 0.0)) + (0.10 * innate_scale)
-
-        # 1) 피해 증가 20% (벞증 적용)
-        # ※ 여기서는 "특수/궁극기 피해"로 매핑
-        stats["special_dmg"] = float(stats.get("special_dmg", 0.0)) + (0.20 * innate_scale)
-        stats["ult_dmg"]     = float(stats.get("ult_dmg", 0.0))     + (0.20 * innate_scale)
 
     def _apply_wind_party_effects():
         u = float(get_uptime("PARTY_WIND_CRITDMG_0p40"))
@@ -2284,7 +2278,7 @@ PRIMA_ENTRY_COEFF = 11.36
 BREATH_GAIN_PER_BASIC_HIT = 0.05
 
 MELAN_CYCLE_TOKENS = [
-    "S", "B4", "U", "B4", "U",
+    "S", "U", "B4", "B4", "U",
     "S", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
     "S", "B4", "B4", "B4", "B4",
