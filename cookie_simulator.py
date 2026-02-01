@@ -984,6 +984,7 @@ def apply_party_buffs(
                     stats["enemy_def_down_raw"] = float(stats.get("enemy_def_down_raw", 0.0)) + add_def
 
         # --- 샬롯(서포터): 영원의 대마술사 세트 ---
+        # [FIX] 속성피해 +30%는 "장착자 속성과 동일한 속성"에만 적용
         # buff_amp는 pre-scale에서 이미 반영했으니 post-scale에서 또 더하지 말 것(중복 방지)
         if in_party_char and (main_cookie_name != "샬롯맛 쿠키"):
             char_set = _get_party_set_name("샬롯맛 쿠키") or "영원의 대마술사 세트"
@@ -994,7 +995,12 @@ def apply_party_buffs(
                 )
                 add_elem = float(base.get("all_elem_dmg", 0.0))
                 if add_elem:
-                    stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + add_elem
+                    wearer_elem = COOKIE_ELEMENT.get("샬롯맛 쿠키", None)       # 세트 착용자(샬롯) 속성
+                    main_elem   = COOKIE_ELEMENT.get(main_cookie_name, None)    # 메인 쿠키 속성
+
+                    # 같은 속성일 때만 '속성피해 +30%' 유효
+                    if wearer_elem is not None and main_elem is not None and (wearer_elem == main_elem):
+                        stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + add_elem
 
         # --- 윈파(서포터): 황금예복 속강타만 ---
         if in_party_wind and (main_cookie_name != "윈드파라거스 쿠키"):
