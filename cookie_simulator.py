@@ -415,8 +415,14 @@ def apply_seaz_passive(stats: Dict[str, float], seaz_name: str, uptime_key_prefi
         stats["buff_all_elem_dmg_raw"] = float(stats.get("buff_all_elem_dmg_raw", 0.0)) + float(passive["ally_all_elem_dmg"]) * u
 
     # atk_pct (시즈) : 벞증 영향 없음
+    # [FIX] "공격력 증가% 축"으로 계산되게 final_atk_mult에 합산
     if "atk_pct" in passive:
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + float(passive["atk_pct"]) * u
+        addv = float(passive["atk_pct"]) * u
+
+        stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + addv
+
+        # 표시용("공격력 증가%")
+        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + addv
 
     return stats
 
@@ -1021,7 +1027,8 @@ def apply_party_buffs(
     # 4) 쿠키별 파티 버프
     # =====================================================
     def _apply_isle_buffs():
-        if main_cookie_name == "이슬맛 쿠키":
+        # 이슬이 존재할 때만(파티에 있거나, 메인이 이슬이거나)
+        if not (in_party_isle or (main_cookie_name == "이슬맛 쿠키")):
             return
 
         BA_total = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
@@ -1038,13 +1045,10 @@ def apply_party_buffs(
         stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + add_final_atk
         stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + add_final_atk  # 표시용
 
-        # =====================================================
         # [ADD] 이슬 "쿠키 고유 버프" (벞증 적용)
         # 1) 투명한 거래 기본공격피해 +5%
         # 2) 여로의 끝 기본공격피해 +5%
-        # =====================================================
-
-        # 1) + 2) 기본공격 피해 +10% (벞증 적용)
+        # -> 합산 +10% (벞증 적용)
         stats["basic_dmg"] = float(stats.get("basic_dmg", 0.0)) + (0.10 * innate_scale)
 
     def _apply_wind_party_effects():
@@ -1053,19 +1057,22 @@ def apply_party_buffs(
         stats["buff_crit_dmg_raw"] = float(stats.get("buff_crit_dmg_raw", 0.0)) + (0.40 * u)
 
     def _apply_charlotte_party_effects():
-        if main_cookie_name == "샬롯맛 쿠키":
+        # 샬롯이 존재할 때만(파티에 있거나, 메인이 샬롯이거나)
+        if not (in_party_char or (main_cookie_name == "샬롯맛 쿠키")):
             return
 
         # [RULE] 버프증폭은 "쿠키 고유 버프"에만 적용
         BA_total = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
         innate_scale = 1.0 + BA_total
 
-        u_bond = 1.0
+        u_bond = 1.0  # 결속 업타임 (필요하면 get_uptime로 교체 가능)
 
         # (1) 결속 공증 39.2%  (벞증 적용)
         add_final_atk = 0.392 * u_bond * innate_scale
         stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + add_final_atk
-        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + add_final_atk  # 표시용
+
+        # 표시용(디버깅/표기 분리용) - 이미 쓰고 있으니 유지
+        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + add_final_atk
 
         # (2) 운명의 바느질 패시브 피해 +5% (벞증 적용)
         stats["passive_dmg"] = float(stats.get("passive_dmg", 0.0)) + (0.05 * innate_scale)
@@ -1203,8 +1210,13 @@ def base_damage_only(stats: Dict[str, float]) -> float:
     )
     party_atk_pct_buff = float(stats.get("buff_atk_pct_raw", 0.0))
 
-    # (1 + 자체공퍼) * (1 + 파티공퍼버프)
-    atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff)
+    # 공퍼 스태킹: ADD(가산) 또는 MUL(기존 곱)
+    if globals().get("ATK_PCT_STACKING_MODE", "ADD") == "MUL":
+        # (1 + 자체공퍼) * (1 + 파티공퍼버프)
+        atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff)
+    else:
+        # (1 + 자체공퍼 + 파티공퍼버프)
+        atk_mult = (1.0 + self_atk_pct_add + party_atk_pct_buff)
 
     # 승급 배율(곱)
     atk_mult *= promo_atk_mult
@@ -1281,20 +1293,27 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
     )
     party_atk_pct_buff = float(s.get("buff_atk_pct_raw", 0.0))
 
-    # 공퍼는 (자체)×(파티버프)×(승급)
-    equip_atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff) * promo_atk_mult
+    # 공퍼 스태킹: ADD(가산) 또는 MUL(기존 곱)
+    if globals().get("ATK_PCT_STACKING_MODE", "ADD") == "MUL":
+        equip_atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff) * promo_atk_mult
+    else:
+        equip_atk_mult = (1.0 + self_atk_pct_add + party_atk_pct_buff) * promo_atk_mult
 
     buff_atk_mult = float(s.get("buff_atk_mult", 1.0))
     atk_mult = equip_atk_mult * buff_atk_mult
 
-    # "등가 공퍼" = 최종 atk_mult - 1
     atk_pct_equiv = atk_mult - 1.0
 
-    # (표시용으로 쪼개고 싶으면 같이 리턴)
-    # self_atk_pct_add, party_atk_pct_buff 도 numeric에 넣어주면 디버깅 편함
-    atk_pct_sum = atk_pct_equiv
+    # 표시용: ADD면 "self+party" 그대로 보여주고,
+    # MUL이면 등가(atk_pct_equiv)로 보여주는 게 혼동이 적음
+    if globals().get("ATK_PCT_STACKING_MODE", "ADD") == "MUL":
+        atk_pct_sum = atk_pct_equiv
+    else:
+        atk_pct_sum = self_atk_pct_add + party_atk_pct_buff
 
     final_atk_mult_add = float(s.get("final_atk_mult", 0.0))
+    final_atk_mult_display = final_atk_mult_add 
+    party_final_atk_display = float(s.get("buff_final_atk_mult", 0.0))  # (선택) 파티에서 온 것만
 
     eff_cr = clamp(
         (float(s.get("crit_rate", 0.0)) * promo_cr_mult) + float(s.get("buff_crit_rate_raw", 0.0)),
@@ -1316,10 +1335,6 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
 
     eff_dmg_bonus = float(s.get("dmg_bonus", 0.0)) + float(s.get("buff_dmg_bonus_raw", 0.0))
 
-    final_dmg_add   = float(s.get("final_dmg", 0.0)) + float(s.get("buff_final_dmg_raw", 0.0))
-    final_dmg_sum   = final_dmg_add + (promo_final_mult - 1.0)
-    final_dmg_equiv = (1.0 + final_dmg_add) * promo_final_mult - 1.0
-
     return {
         "numeric": {
             "equip_atk_mult": equip_atk_mult,
@@ -1329,6 +1344,8 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
             "party_atk_pct_buff": party_atk_pct_buff,
             "atk_pct_equiv": atk_pct_equiv,
             "final_atk_mult_add": final_atk_mult_add,
+            "final_atk_mult_display": final_atk_mult_display,
+            "party_final_atk_display": party_final_atk_display,
             "eff_crit_rate": eff_cr,
             "eff_crit_dmg": eff_cd,
             "eff_all_elem_dmg": eff_all_elem,
@@ -1337,10 +1354,7 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
             "eff_elem_res_reduction": eff_elem_res_red,
             "eff_mark_res_reduction": eff_mark_res_red,
             "dmg_bonus": eff_dmg_bonus,
-            "final_dmg_add": final_dmg_add,
             "promo_final_dmg_mult": promo_final_mult,
-            "final_dmg_sum": final_dmg_sum,
-            "final_dmg_equiv": final_dmg_equiv,
             "buff_amp": float(s.get("buff_amp", 0.0)),
             "debuff_amp": DA,
             "element_strike_dmg": float(s.get("element_strike_dmg", 0.0)),
@@ -1814,9 +1828,9 @@ def _min_crit_slots_needed_for_crit100_generic(template: Dict[str, float]) -> Op
 # -----------------------------
 WIND_PROMO_ENABLED = True
 
-WIND_PROMO_CRIT_RATE_MULT = 1.10
-WIND_PROMO_ATK_PCT_MULT   = 1.10
-WIND_PROMO_FINAL_DMG_MULT = 1.05
+WIND_PROMO_CRIT_RATE_MULT = 1.0
+WIND_PROMO_ATK_PCT_MULT   = 1.0
+WIND_PROMO_FINAL_DMG_MULT = 1.0
 WIND_PROMO_DEF_PCT_MULT   = 1.08
 WIND_PROMO_HP_PCT_MULT    = 1.08
 
@@ -2242,7 +2256,7 @@ MELAN_PROMO_ENABLED = True
 
 MELAN_PROMO_CRIT_RATE_MULT = 1.0
 MELAN_PROMO_ARMOR_PEN_MULT = 1.0
-MELAN_PROMO_ATK_PCT_MULT   = 1.10
+MELAN_PROMO_ATK_PCT_MULT   = 1.0
 MELAN_PROMO_FINAL_DMG_MULT = 1.0
 
 MELAN_PROMO_UNDEAD_EXTRA     = 1
@@ -2822,8 +2836,8 @@ ISLE_CLEAR_DEAL_DUR     = 30.0
 ISLE_PROMO_BASIC_DMG_CLEAR = 0.05
 ISLE_PROMO_BASIC_DMG_END   = 0.05
 
-ISLE_PROMO_ATK_MULT       = 1.08
-ISLE_PROMO_FINAL_DMG_ADD  = 0.04
+ISLE_PROMO_ATK_MULT       = 1.0
+ISLE_PROMO_FINAL_DMG_ADD  = 0.0
 ISLE_PROMO_CHARGE_SHADOW_MULT = 1.20
 
 ISLE_SHIELD_BASE_MULT = 1.008  # 보호막 기본 배율(공격력의 100.8%)
@@ -3233,10 +3247,10 @@ def optimize_isle_cycle(
 BLACK_BARLEY_PROMO_ENABLED = True
 BLACK_BARLEY_FORCE_CRIT_100 = True
 
-BLACK_BARLEY_PROMO_CRIT_RATE_MULT    = 1.10
-BLACK_BARLEY_PROMO_BASE_ATK_MULT     = 1.08
-BLACK_BARLEY_PROMO_DEF_PCT_MULT      = 1.08
-BLACK_BARLEY_PROMO_HP_PCT_MULT       = 1.08
+BLACK_BARLEY_PROMO_CRIT_RATE_MULT    = 1.0
+BLACK_BARLEY_PROMO_BASE_ATK_MULT     = 1.0
+BLACK_BARLEY_PROMO_DEF_PCT_MULT      = 1.0
+BLACK_BARLEY_PROMO_HP_PCT_MULT       = 1.0
 BLACK_BARLEY_PROMO_SPECIAL_DMG_MULT  = 1.20
 BLACK_BARLEY_PROMO_ULT_DMG_MULT      = 1.20
 BLACK_BARLEY_PROMO_BASIC_DMG_MULT    = 1.30
