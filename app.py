@@ -1289,6 +1289,8 @@ with st.container(key="outer_shell", border=False):
             elif cookie == "샬롯맛 쿠키":
                 # 샬롯 메인 시뮬 + 역할 고정(서폿) => 파티는 스트(윈드) 고정
 
+                PREFERRED_SEAZ_CHAR = "허브그린드:작은성배" 
+
                 # 1) 원본 옵션 불러오기
                 all_opts = (
                     getattr(sim, "char_allowed_seaz", lambda: None)()
@@ -1299,17 +1301,19 @@ with st.container(key="outer_shell", border=False):
                 # 2) 허브그린드만 노출
                 seaz_options = [x for x in all_opts if str(x).startswith("허브그린드:")]
 
-                # 3) 혹시 비면(데이터 없을 때) 최소 1개는 유지
+                # 3) 혹시 비면(데이터 없을 때) 기본값 후보를 만들어 둠
                 if not seaz_options:
-                    fallback = getattr(sim, "FIXED_SEAZ_ISLE", "허브그린드:백마법사의 의지")
+                    # 기존엔 FIXED_SEAZ_ISLE(=백마법사의 의지)가 fallback이라 그게 자동으로 뜸
+                    fallback = PREFERRED_SEAZ_CHAR
                     seaz_options = [fallback]
 
                 # (기존 필터 유지)
                 seaz_options = hide_breeder_when_not_wind(cookie, seaz_options) or [seaz_options[0]]
 
+                # 기본값 선택 로직: 작은성배가 목록에 있으면 그걸로, 아니면 첫 번째
                 cur = st.session_state.get(sk, "")
                 if (not cur) or (cur not in seaz_options):
-                    st.session_state[sk] = seaz_options[0]
+                    st.session_state[sk] = PREFERRED_SEAZ_CHAR if PREFERRED_SEAZ_CHAR in seaz_options else seaz_options[0]
 
                 seaz = st.selectbox("시즈나이트 선택", seaz_options, label_visibility="collapsed", key=sk)
                 st.session_state.seaz = seaz
