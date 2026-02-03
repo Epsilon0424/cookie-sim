@@ -19,7 +19,7 @@ UPTIME_CONFIG = {
     # 이슬: 파티 공퍼 +22.4%
     "PARTY_ISLE_ATK_0p224": {"mode": MODE_ALWAYS},
 
-    # 이슬: 시즈로 최종공 +25%, 모속피 +30% (상시/평균 등 설정 가능)
+    # 이슬: 시즈로 최종공 +25%, 모속피 +30%
     "PARTY_ISLE_SEAZ_ATK25_ALL30": {
         "mode": MODE_ALWAYS,
         "duration": 15.0,
@@ -703,7 +703,9 @@ def apply_unique(
     # (4) 최종피해 기본옵션: 본인만
     fd_add = float(u.get("final_dmg_add", 0.0))
     if fd_add and is_owner:
-        stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + fd_add
+        # 연금술사는 발동형(업타임)에서만 처리해야 중복 없음
+        if ut != "alchemist_potion":
+            stats["final_dmg"] = float(stats.get("final_dmg", 0.0)) + fd_add
 
     # =====================================================
     # 타입별 효과 처리
@@ -742,8 +744,7 @@ def apply_unique(
     #  - 강화표식/물약 효과는 본인만
     # -----------------------
     if ut == "enhanced_mark":
-        if not is_owner:
-            return
+        # if not is_owner: return  # 이 줄 제거
         stats["element_strike_dmg"] = float(stats.get("element_strike_dmg", 0.0)) + float(u.get("strike_bonus", 0.0))
         return
 
@@ -1106,7 +1107,7 @@ def apply_party_buffs(
     FIXED_PARTY_UNIQUE: Dict[str, str] = {
         "이슬맛 쿠키": "버터밀크맛 쿠키의 기억",
         "샬롯맛 쿠키": "버터밀크맛 쿠키의 기억",
-        "윈드파라거스 쿠키": "연금술사맛 쿠키의 기억",
+        "윈드파라거스 쿠키": "선데맛 쿠키의 기억",
     }
 
     def _apply_party_member_unique(cookie_name: str):
@@ -1891,7 +1892,7 @@ def wind_allowed_equips() -> List[str]:
     return ["황금 예복 세트"]
 
 def wind_allowed_uniques() -> List[str]:
-    return ["연금술사맛 쿠키의 기억"]
+    return ["선데맛 쿠키의 기억"]
 
 def wind_allowed_potentials() -> List[Dict[str, int]]:
     return [{
@@ -2082,7 +2083,7 @@ def optimize_wind_cycle(
     base = BASE_STATS_WIND[cookie].copy()
 
     equips = _resolve_equip_list_override(equip_override, wind_allowed_equips())
-    uniques = ["연금술사맛 쿠키의 기억"]
+    uniques = ["선데맛 쿠키의 기억"]
     potentials = wind_allowed_potentials()
     artifacts = wind_allowed_artifacts()
 
@@ -2239,7 +2240,7 @@ def optimize_wind_cycle(
 # -----------------------------
 MELAN_PROMO_ENABLED = True
 
-MELAN_PROMO_CRIT_RATE_MULT = 1.10
+MELAN_PROMO_CRIT_RATE_MULT = 1.0
 MELAN_PROMO_ARMOR_PEN_MULT = 1.08
 MELAN_PROMO_ATK_PCT_MULT   = 1.10
 MELAN_PROMO_FINAL_DMG_MULT = 1.0
