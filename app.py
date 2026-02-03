@@ -882,7 +882,13 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     add_if_nonzero(common_rows, "표식 저항 감소", _fmt_pct(float(eff.get("eff_mark_res_reduction", 0.0))), float(eff.get("eff_mark_res_reduction", 0.0)))
 
     add_if_nonzero(common_rows, "피해량", _fmt_pct(float(eff.get("dmg_bonus", 0.0))), float(eff.get("dmg_bonus", 0.0)))
-    add_if_nonzero(common_rows, "최종 피해", _fmt_pct(float(eff.get("final_dmg_sum", 0.0))), float(eff.get("final_dmg_sum", 0.0)))
+
+    # [FIX] 최종 피해는 summarize_effective_stats 의존하지 말고 stats에서 "등가"로 직접 계산
+    final_dmg_add = float(stats.get("final_dmg", 0.0)) + float(stats.get("buff_final_dmg_raw", 0.0))
+    promo_final_mult = float(stats.get("promo_final_dmg_mult", 1.0))
+    final_dmg_equiv = (1.0 + final_dmg_add) * promo_final_mult - 1.0
+    add_if_nonzero(common_rows, "최종 피해", _fmt_pct(final_dmg_equiv), final_dmg_equiv)
+
     add_if_nonzero(common_rows, "속성강타 피해", _fmt_pct(float(eff.get("element_strike_dmg", 0.0))), float(eff.get("element_strike_dmg", 0.0)))
 
     common_df = pd.DataFrame(common_rows, columns=["항목", "값"])
