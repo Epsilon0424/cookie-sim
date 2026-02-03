@@ -776,7 +776,13 @@ def apply_unique(
         atk = float(u.get("ally_atk_pct_buff", 0.0))
 
         # [RULE] 유니크로 주는 버프는 벞증 영향 없음
-        stats["buff_atk_pct_raw"] = float(stats.get("buff_atk_pct_raw", 0.0)) + atk * up
+        # [CHANGE] 블베 유니크 공증(+12%)을 "공격력 증가%(최종공)" 축으로 이동
+        addv = atk * up
+
+        stats["final_atk_mult"] = float(stats.get("final_atk_mult", 0.0)) + addv
+
+        # 표시용: 공격력 증가% 항목에 "파티에서 온 최종공"로 잡히게
+        stats["buff_final_atk_mult"] = float(stats.get("buff_final_atk_mult", 0.0)) + addv
         return
 
     if ut == "kohlrabi_support":
