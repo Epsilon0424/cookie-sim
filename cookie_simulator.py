@@ -385,7 +385,7 @@ SEAZNITES = {
     "바닐라몬드:돌진하는 전차":   {"passive": {"final_dmg": 0.12, "atk_spd": 0.12, "move_spd": 0.12}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:추격자의 결의":   {"passive": {"final_dmg": 0.30, "move_spd": 0.10}, "sub": VANILLA_MONDE_SUB},
 
-    "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.25, "ally_all_elem_dmg": 0.30}, "sub": HERB_GREEN_SUB},
+    "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.15, "ally_all_elem_dmg": 0.18}, "sub": HERB_GREEN_SUB},
     "허브그린드:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45}, "sub": HERB_GREEN_SUB},
     "허브그린드:가벼운 손길": {"passive": {"heal_pct": 0.16, "atk_spd": 0.10, "final_dmg": 0.20}, "sub": HERB_GREEN_SUB},
 }
@@ -1094,7 +1094,7 @@ def apply_party_buffs(
     # =====================================================
     FIXED_PARTY_SEAZ: Dict[str, str] = {
         "이슬맛 쿠키": "허브그린드:백마법사의 의지",
-        "샬롯맛 쿠키": "허브그린드:백마법사의 의지",
+        "샬롯맛 쿠키": "허브그린드:작은성배",
         "윈드파라거스 쿠키": "페퍼루비:믿음직한 브리더",
     }
 
@@ -1113,7 +1113,7 @@ def apply_party_buffs(
     # =====================================================
     FIXED_PARTY_UNIQUE: Dict[str, str] = {
         "이슬맛 쿠키": "버터밀크맛 쿠키의 기억",
-        "샬롯맛 쿠키": "버터밀크맛 쿠키의 기억",
+        "샬롯맛 쿠키": "블랙베리맛 쿠키의 기억",
         "윈드파라거스 쿠키": "선데맛 쿠키의 기억",
     }
 
@@ -1467,7 +1467,7 @@ def _assumed_charlotte_buff_amp_for_party() -> float:
         pass
 
     try:
-        fixed_seaz = globals().get("FIXED_SEAZ_CHARLOTTE", "허브그린드:백마법사의 의지")
+        fixed_seaz = globals().get("FIXED_SEAZ_CHARLOTTE", "허브그린드:작은성배")
         seaz = SEAZNITES.get(fixed_seaz, {})
         ba += float((seaz.get("sub") or {}).get("buff_amp", 0.0))
     except Exception:
@@ -3745,7 +3745,7 @@ def optimize_black_barley_cycle(
 # -----------------------------
 # (E-0) 고정 세팅
 # -----------------------------
-CHARLOTTE_FIXED_UNIQUE   = "버터밀크맛 쿠키의 기억"
+CHARLOTTE_FIXED_UNIQUE   = "블랙베리맛 쿠키의 기억"
 CHARLOTTE_FIXED_EQUIP    = "영원의 대마술사 세트"
 CHARLOTTE_FIXED_ARTIFACT = "희미한 날갯짓"
 
