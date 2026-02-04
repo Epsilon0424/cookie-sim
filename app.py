@@ -7,26 +7,6 @@ import cookie_simulator as sim
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
 STEP_FIXED = 2
 
-def render_table_card(title: str, rows: list[tuple[str, str]]):
-    if not rows:
-        return False
-
-    with st.container(border=True):
-        st.markdown(f'<div class="h-title">{title}</div>', unsafe_allow_html=True)
-        df = pd.DataFrame(rows, columns=["항목", "값"])
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    return True
-
-def render_cards_flow(cards, per_row=3):
-    i = 0
-    while i < len(cards):
-        chunk = cards[i:i+per_row]
-        cols = st.columns(len(chunk), gap="small")
-        for col, render_fn in zip(cols, chunk):
-            with col:
-                render_fn()
-        i += per_row
-
 st.markdown(
 """
 <style>
@@ -460,6 +440,7 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
 .prog-bar{
   height: 100%;
   width: 0%;
+  border-radius: 3px;
   background: #4b5563;
   transition: width 120ms ease;
   position: relative;
@@ -505,6 +486,42 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
 .prog-area{
   padding: 0 !important;
   margin: 0px 0 8px 0 !important;
+}
+
+/* =====================================================
+   10-1) Progress row + Spinner
+===================================================== */
+.prog-row{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
+
+.prog-spinner{
+  width: 14px;
+  height: 14px;
+  border: 3px solid rgba(17,24,39,0.18); /* 연한 테두리 */
+  border-top-color: rgba(17,24,39,0.70); /* 진한 윗부분 */
+  border-radius: 50%;
+  animation: prog_spin 0.85s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes prog_spin{
+  from{ transform: rotate(0deg); }
+  to{ transform: rotate(360deg); }
+}
+
+/* 완료되면 스피너 숨김 */
+.prog-spinner.done{
+  animation: none !important;
+  opacity: 0;
+  width: 0;
+  height: 0;
+  border-width: 0;
+  margin: 0;
+  padding: 0;
 }
 
 /* =====================================================
@@ -581,19 +598,11 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
 unsafe_allow_html=True,
 )
 
-import time
-import html as _html
-import streamlit as st
-import pandas as pd
-import cookie_simulator as sim
-
-
 # =====================================================
 # 유틸: 한글 매핑
 # =====================================================
 def _kr_or_key(mapping: dict, k: str) -> str:
     return mapping.get(k, k)
-
 
 # =====================================================
 # 파티 슬롯 selectbox 기본값 1회만 넣기
@@ -605,11 +614,6 @@ def init_once(key: str, value):
     st.session_state[key] = value
     st.session_state[flag] = True
 
-
-def norm_none(x: str) -> str:
-    return "" if (x is None or x == "없음") else x
-
-
 # =====================================================
 # 유틸: DF -> HTML Table (n컬럼 지원, tooltip 포함)
 # =====================================================
@@ -618,7 +622,6 @@ def hide_breeder_when_not_wind(cookie_name: str, options: list[str]) -> list[str
     if cookie_name == "윈드파라거스 쿠키":
         return options
     return [x for x in options if "믿음직한 브리더" not in str(x)]
-
 
 def df_to_html_table(
     df: pd.DataFrame,
@@ -670,7 +673,6 @@ def df_to_html_table(
 </table>
 """.strip()
 
-
 def render_labeled_table(
     title: str,
     df: pd.DataFrame,
@@ -694,7 +696,6 @@ def render_labeled_table(
 
     st.markdown(html, unsafe_allow_html=True)
 
-
 # =====================================================
 # 최종스탯 grid 전용: HTML 생성/렌더
 # =====================================================
@@ -705,7 +706,6 @@ def labeled_table_html(title: str, df: pd.DataFrame, small: bool = False, col_ra
     else:
         body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
-
 
 def labeled_table_html_optional(
     title: str,
@@ -720,7 +720,6 @@ def labeled_table_html_optional(
     pill = f'<div class="stat-pill">{_html.escape(title)}</div>'
     body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
-
 
 def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
     items = []
@@ -740,7 +739,6 @@ def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_d
     html = "<div class='stat-grid'>" + "".join(items) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
-
 # =====================================================
 # 요약표(잠재/조각)
 # =====================================================
@@ -755,7 +753,6 @@ def pretty_potentials(pot: dict) -> pd.DataFrame:
             rows.append({"항목": _kr_or_key(getattr(sim, "POTENTIAL_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
 
-
 def pretty_shards(shards: dict) -> pd.DataFrame:
     rows = []
     for k, v in (shards or {}).items():
@@ -766,7 +763,6 @@ def pretty_shards(shards: dict) -> pd.DataFrame:
         if iv >= 1:
             rows.append({"항목": _kr_or_key(getattr(sim, "SHARD_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
-
 
 # =====================================================
 # 사이클 breakdown 표 (비율 포함)
@@ -806,14 +802,17 @@ def cycle_breakdown_df(cb: dict) -> pd.DataFrame:
         out.append({"항목": label, "딜": f"{fv:,.4f}", "비율(%)": f"{pct:.2f}"})
     return pd.DataFrame(out, columns=["항목", "딜", "비율(%)"])
 
-
 # =====================================================
 # 최종스탯 그룹 (0인 항목 제거)
+#  - 치피: "총 치피(%)"로 표시 (예: 190.0%)
+#  - 패시브: TOTAL 배율(= 1.690920 => 169.092%)을 표에 그대로 표시
+#  - promo(승급) 곱은 "표시"에서 섞지 않음
 # =====================================================
 def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     stats = stats or {}
     party = party or []
 
+    # summarize_effective_stats는 너가 수정한 sim 버전을 기준
     eff = sim.summarize_effective_stats(stats).get("numeric", {})
 
     def _f(d: dict, k: str, default=0.0) -> float:
@@ -846,9 +845,9 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     OA = _f(stats, "base_atk", 0.0) + _f(stats, "equip_atk_flat", 0.0)
     EA = _f(stats, "base_elem_atk", 0.0) + _f(stats, "elem_atk", 0.0)
 
-    atk_pct_sum   = eff.get("atk_pct_sum", 0.0)         # 화면 표시용: 합(+)
-    atk_pct_equiv = eff.get("atk_pct_equiv", 0.0)       # 최종공 계산용: 등가(%)
-    final_atk_add = eff.get("final_atk_mult_add", 0.0)
+    atk_pct_sum   = float(eff.get("atk_pct_sum", 0.0))         # 화면 표시용: 합(+)
+    atk_pct_equiv = float(eff.get("atk_pct_equiv", 0.0))       # 최종공 계산용: 등가(%)
+    final_atk_add = float(eff.get("final_atk_mult_add", 0.0))  # 최종공 증가(+)
 
     final_atk_input = (OA + EA) * (1.0 + atk_pct_equiv) * (1.0 + final_atk_add)
 
@@ -861,13 +860,26 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     atk_df = pd.DataFrame(atk_rows, columns=["항목", "값"])
 
     # =========================
-    # 치명
+    # 치명 (치피는 "총 치피(%)"로 표시)
+    #  - eff_crit_dmg_total_pct: 예) 190.0
+    #  - eff_crit_dmg_mult: 예) 1.90
     # =========================
     crit_rows = []
-    add_if_nonzero(crit_rows, "치명타 확률", _fmt_pct(float(eff.get("eff_crit_rate", 0.0))), float(eff.get("eff_crit_rate", 0.0)))
+    eff_cr = float(eff.get("eff_crit_rate", 0.0))
+    add_if_nonzero(crit_rows, "치명타 확률", _fmt_pct(eff_cr), eff_cr)
 
-    cd_eff = float(eff.get("eff_crit_dmg", 1.0))
-    add_if_nonzero(crit_rows, "치명타 피해", _fmt_pct(cd_eff - 1.0), cd_eff - 1.0)
+    cd_total_pct = float(eff.get("eff_crit_dmg_total_pct", 0.0))  # 190.0 같은 값
+    cd_mult      = float(eff.get("eff_crit_dmg_mult", 1.0))        # 1.90
+
+    # 총 치피가 0으로 들어오는 케이스 방어(키 누락/구버전 eff 등)
+    if cd_total_pct <= 0.0:
+        # fallback: 기존 eff_crit_dmg가 mult로 들어온 경우 대비
+        cd_mult_fallback = float(eff.get("eff_crit_dmg", cd_mult))
+        cd_mult = cd_mult_fallback if cd_mult_fallback > 0 else cd_mult
+        cd_total_pct = cd_mult * 100.0
+
+    # 표시는 "190.0%"처럼 총치피로
+    add_if_nonzero(crit_rows, "치명타 피해", f"{cd_total_pct:.1f}%", cd_mult - 1.0)
     crit_df = pd.DataFrame(crit_rows, columns=["항목", "값"])
 
     # =========================
@@ -900,20 +912,18 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
     add_if_nonzero(skill_rows, "기본공격 피해", _fmt_pct(_f(stats, "basic_dmg", 0.0)), _f(stats, "basic_dmg", 0.0))
     add_if_nonzero(skill_rows, "특수스킬 피해", _fmt_pct(_f(stats, "special_dmg", 0.0)), _f(stats, "special_dmg", 0.0))
     add_if_nonzero(skill_rows, "궁극기 피해", _fmt_pct(_f(stats, "ult_dmg", 0.0)), _f(stats, "ult_dmg", 0.0))
-    # 패시브 피해(기본 %) + (적이 받는 패시브 피해 증가) + (패시브 피해 배율)
-    base_passive = float(stats.get("passive_dmg", 0.0))                  # 예: 0.20
-    taken = float(stats.get("enemy_passive_taken_inc", 0.0))             # 예: 0.10 (샬롯 파티효과)
-    p_mult = float(stats.get("passive_dmg_mult", 1.0))                   # 예: 1.20*1.10=1.32
 
-    # 실제 passive 스킬 배율과 동일한 "최종 패시브 배율"
-    final_passive_mult = (1.0 + base_passive) * (1.0 + taken) * p_mult
+    # =========================
+    # 패시브 스킬 피해
+    # =========================
+    p_add = float(stats.get("passive_dmg", 0.0))                 # add
+    t_add = float(stats.get("enemy_passive_taken_inc", 0.0))     # add
+    m     = float(stats.get("passive_dmg_mult", 1.0))            # mult (x1.20 등)
 
-    final_passive_equiv = final_passive_mult - 1.0
-    add_if_nonzero(skill_rows, "패시브 피해", _fmt_pct(final_passive_equiv), final_passive_equiv)
+    total_no_promo = (1.0 + p_add) * (1.0 + t_add) * m
 
-    # [ADD] 적이 받는 패시브 피해 증가(샬롯 파티효과)
-    taken = float(stats.get("enemy_passive_taken_inc", 0.0))
-    add_if_nonzero(skill_rows, "적이 받는 패시브 피해", _fmt_pct(taken), taken)
+    add_if_nonzero(skill_rows, "패시브 피해", _fmt_pct(total_no_promo - 1.0), total_no_promo - 1.0)
+    add_if_nonzero(skill_rows, "적이 받는 패시브 피해", _fmt_pct(t_add), t_add)
 
     skill_df = pd.DataFrame(skill_rows, columns=["항목", "값"])
 
@@ -943,7 +953,7 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
                     pass
         return float(default)
 
-    buff_amp = pick_num("party_buff_amp_total", "buff_amp_total")
+    buff_amp   = pick_num("party_buff_amp_total", "buff_amp_total")
     debuff_amp = pick_num("party_debuff_amp_total", "debuff_amp_total")
 
     amp_rows = []
@@ -953,17 +963,14 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
 
     return atk_df, crit_df, common_df, skill_df, surv_df, amp_df
 
-
 # =====================================================
 #  추가: 장비 선택 모드/장비 위젯 키 (쿠키별 분리)
 # =====================================================
 def mode_key(kind: str) -> str:
     return f"mode_widget__{kind}"
 
-
 def equip_key(kind: str) -> str:
     return f"equip_widget__{kind}"
-
 
 # =====================================================
 # 세션 상태 (쿠키별 widget key 분리)
@@ -989,7 +996,6 @@ if "equip" not in st.session_state:
 if "_cookie_prev" not in st.session_state:
     st.session_state._cookie_prev = st.session_state.cookie
 
-
 def kind_of(cookie_name: str) -> str:
     return {
         "윈드파라거스 쿠키": "wind",
@@ -999,18 +1005,14 @@ def kind_of(cookie_name: str) -> str:
         "샬롯맛 쿠키": "char",
     }.get(cookie_name, "char")
 
-
 def seaz_key(kind: str) -> str:
     return f"seaz_widget__{kind}"
-
 
 def party1_key(kind: str) -> str:
     return f"party_slot1__{kind}"
 
-
 def party2_key(kind: str) -> str:
     return f"party_slot2__{kind}"
-
 
 # =====================================================
 # 상단 타이틀
@@ -1021,7 +1023,6 @@ st.markdown("""
   <div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>
 </div>
 """, unsafe_allow_html=True)
-
 
 # =====================================================
 # 레이아웃: 좌/우
@@ -1105,8 +1106,6 @@ with st.container(key="outer_shell", border=False):
             )
             st.session_state.mode = mode
 
-            equip_override = None  # 기본
-
             # =====================================================
             # 1) 이슬: 해적셋 고정
             # =====================================================
@@ -1117,7 +1116,6 @@ with st.container(key="outer_shell", border=False):
                     st.session_state[ek] = fixed_opts[0]
 
                 st.session_state.equip = fixed_opts[0]
-                equip_override = fixed_opts[0]
 
                 if mode == "선택(수동)":
                     st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
@@ -1151,7 +1149,6 @@ with st.container(key="outer_shell", border=False):
                     equip = st.session_state.get(ek, charlotte_opts[0])
 
                 st.session_state.equip = equip
-                equip_override = equip
 
             # =====================================================
             # 3) 나머지: 기존 로직 (수동이면 선택, 자동이면 None)
@@ -1179,11 +1176,8 @@ with st.container(key="outer_shell", border=False):
                         key=ek,
                     )
                     st.session_state.equip = equip
-                    equip_override = equip
                 else:
                     st.session_state.equip = ""
-                    equip_override = None
-
 
             # =====================================================
             # 시즈나이트/파티
@@ -1333,14 +1327,19 @@ with st.container(key="outer_shell", border=False):
 
             def _progress_html(pct: int) -> str:
                 pct = max(0, min(100, int(pct)))
-                return f"""
-                <div class="prog-area">
-                <div class="prog-wrap">
-                    <div class="prog-bar" style="width:{pct}%;"></div>
-                    <div class="prog-text">{pct}%</div>
-                </div>
-                </div>
-                """.strip()
+                spinner_cls = "prog-spinner done" if pct >= 100 else "prog-spinner"
+
+                return (
+            f'<div class="prog-area">'
+            f'  <div class="prog-row">'
+            f'    <div class="{spinner_cls}"></div>'
+            f'    <div class="prog-wrap">'
+            f'      <div class="prog-bar" style="width:{pct}%;"></div>'
+            f'      <div class="prog-text">{pct}%</div>'
+            f'    </div>'
+            f'  </div>'
+            f'</div>'
+                )
 
             def run_with_progress(kind_cookie: str):
                 progress_slot.markdown(_progress_html(0), unsafe_allow_html=True)
@@ -1352,8 +1351,9 @@ with st.container(key="outer_shell", border=False):
                 best = None
                 best_kind = None
 
-                # 수정: 수동모드가 아니어도 session_state.equip 이 있으면 override로 넘김
-                equip_override_local = st.session_state.equip or None
+                equip_override_local = None
+                if st.session_state.mode == "선택(수동)":
+                    equip_override_local = st.session_state.equip or None
 
                 if kind_cookie == "wind":
                     best = sim.optimize_wind_cycle(
@@ -1420,43 +1420,6 @@ with st.container(key="outer_shell", border=False):
                 # 잠재 고정은 서폿(이슬/샬롯)만
                 if isinstance(best, dict) and best_kind in ("isle", "char"):
                     best["potentials"] = {"elem_atk": 2, "atk_pct": 2, "buff_amp": 4}
-
-                # -----------------------------------------------------
-                # 이슬/샬롯: 유니크 + 설탕유리조각 "자동으로 뽑기"
-                # -----------------------------------------------------
-                if isinstance(best, dict) and best_kind in ("isle", "char"):
-                    # 장비 고정 보강 (표시/저장용)
-                    if best_kind == "isle":
-                        best.setdefault("equip_fixed", "전설의 유령해적 세트")
-                        best.setdefault("artifact_fixed", "비에 젖은 과거")
-                        equip_for_support = "전설의 유령해적 세트"
-                        cookie_name = "이슬맛 쿠키"
-                    else:
-                        # 샬롯은 대마술사 고정
-                        best.setdefault("equip", "영원의 대마술사 세트")
-                        equip_for_support = "영원의 대마술사 세트"
-                        cookie_name = "샬롯맛 쿠키"
-
-                    # 1) 유니크 자동 선택
-                    pick_unique = getattr(sim, "pick_best_support_unique", None)
-                    if callable(pick_unique):
-                        u = pick_unique(
-                            cookie_kr=cookie_name,
-                            party=st.session_state.party,
-                        )
-                        if u and (not best.get("unique")):
-                            best["unique"] = u
-
-                    # 2) 설탕유리조각 자동 선택
-                    pick_shards = getattr(sim, "pick_best_support_shards", None)
-                    if callable(pick_shards):
-                        sh = pick_shards(
-                            cookie_kr=cookie_name,
-                            party=st.session_state.party,
-                            equip=equip_for_support,   # 샬롯 대마술사 세트로 전달
-                        )
-                        if isinstance(sh, dict) and (not best.get("shards")):
-                            best["shards"] = sh
 
                 progress_slot.markdown(_progress_html(100), unsafe_allow_html=True)
                 return best, best_kind
@@ -1585,7 +1548,6 @@ with st.container(key="outer_shell", border=False):
 
             if st.session_state.last_run:
                 st.caption(f"실행: {st.session_state.last_run}")
-
 
 # =====================================================
 # Global note (outer_shell 밖)
