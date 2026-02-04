@@ -67,7 +67,7 @@ ARGON_DMG_REDUCTION = 0.30  # 딜 모델엔 미반영
 # -----------------------------
 # 0.4) 전투/공식 파라미터
 # -----------------------------
-DEFENSE_K = 2.5
+DEFENSE_K = 3.0
 RECOMMENDED_ELEM_MULT = 1.30
 
 # ---- 속성강타(표식) 모델
@@ -78,34 +78,6 @@ MARK_RELEASE_MULT = 3.0 / 16.0
 
 STRIKE_RATIO_MATCH    = 1.0 / 8.0
 STRIKE_RATIO_MISMATCH = 1.0 / 16.0
-
-# =====================================================
-# (필수) 승급 토글/배율 기본값 (정의 안 되어있으면 NameError 나서)
-# =====================================================
-MELAN_PROMO_ENABLED = False
-WIND_PROMO_ENABLED = False
-BLACK_BARLEY_PROMO_ENABLED = False
-
-MELAN_PROMO_CRIT_RATE_MULT = 1.0
-MELAN_PROMO_ARMOR_PEN_MULT = 1.0
-MELAN_PROMO_ATK_PCT_MULT = 1.0
-MELAN_PROMO_FINAL_DMG_MULT = 1.0
-MELAN_PROMO_PRIMA_DMG_MULT = 1.0
-
-WIND_PROMO_CRIT_RATE_MULT = 1.0
-WIND_PROMO_ATK_PCT_MULT = 1.0
-WIND_PROMO_FINAL_DMG_MULT = 1.0
-WIND_PROMO_DEF_PCT_MULT = 1.0
-WIND_PROMO_HP_PCT_MULT = 1.0
-
-BLACK_BARLEY_PROMO_CRIT_RATE_MULT = 1.0
-BLACK_BARLEY_PROMO_BASE_ATK_MULT = 1.0
-BLACK_BARLEY_PROMO_DEF_PCT_MULT = 1.0
-BLACK_BARLEY_PROMO_HP_PCT_MULT = 1.0
-BLACK_BARLEY_PROMO_SPECIAL_DMG_MULT = 1.0
-BLACK_BARLEY_PROMO_ULT_DMG_MULT = 1.0
-BLACK_BARLEY_PROMO_BASIC_DMG_MULT = 1.0
-
 
 # =====================================================
 # 1) 공통: 설탕유리조각(41칸) / 잠재력(8칸)
@@ -216,9 +188,8 @@ def add(stats: Dict[str, float], bonus: Dict[str, float]) -> None:
 EPS_CR = 1e-12
 
 def effective_crit_rate_raw(stats: Dict[str, float]) -> float:
-    """클램프 전 '실전 치확' = (crit_rate * 승급배율) + (버프치확)."""
-    promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
-    return (float(stats.get("crit_rate", 0.0)) * promo_cr_mult) + float(stats.get("buff_crit_rate_raw", 0.0))
+    """클램프 전 '실전 치확' = (crit_rate) + (버프치확)."""
+    return float(stats.get("crit_rate", 0.0)) + float(stats.get("buff_crit_rate_raw", 0.0))
 
 def is_crit_100(stats: Dict[str, float]) -> bool:
     """실전 치확이 100% 이상인지."""
@@ -390,7 +361,7 @@ SEAZNITES = {
     "바닐라몬드:돌진하는 전차":   {"passive": {"final_dmg": 0.12, "atk_spd": 0.12, "move_spd": 0.12}, "sub": VANILLA_MONDE_SUB},
     "바닐라몬드:추격자의 결의":   {"passive": {"final_dmg": 0.30, "move_spd": 0.10}, "sub": VANILLA_MONDE_SUB},
 
-    "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.15, "ally_all_elem_dmg": 0.18}, "sub": HERB_GREEN_SUB},
+    "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.125, "ally_all_elem_dmg": 0.15}, "sub": HERB_GREEN_SUB},
     "허브그린드:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45}, "sub": HERB_GREEN_SUB},
     "허브그린드:가벼운 손길": {"passive": {"heal_pct": 0.16, "atk_spd": 0.10, "final_dmg": 0.20}, "sub": HERB_GREEN_SUB},
 }
@@ -922,33 +893,6 @@ def apply_party_buffs(
             return fallback
 
     # =====================================================
-    # [유틸] "메인/파티" 아티팩트 이름 가져오기
-    #  - 메인=main_cookie_name일 때는 stats에 들어있는 값을 최우선
-    #  - 파티원은 party_artifacts(인자) or stats["party_artifacts"]를 사용
-    # =====================================================
-    def _get_cookie_artifact_name(cookie_name: str) -> str:
-        # 1) 메인 쿠키면 stats의 키를 먼저 본다
-        if cookie_name == main_cookie_name:
-            for k in ("artifact_name", "artifact", "selected_artifact", "artifact_selected"):
-                v = stats.get(k, "")
-                if isinstance(v, str) and v and v != "NONE":
-                    return v
-
-        # 2) 외부에서 넘어온 파티 아티팩트 맵
-        amap = party_artifacts
-        if not isinstance(amap, dict):
-            amap = stats.get("party_artifacts", {}) if isinstance(stats.get("party_artifacts", {}), dict) else {}
-
-        try:
-            v2 = str(amap.get(cookie_name, "")) if amap else ""
-        except Exception:
-            v2 = ""
-
-        if not v2 or v2 == "NONE":
-            return ""
-        return v2
-
-    # =====================================================
     # 2) 파티 자동 세트효과
     # =====================================================
     FIXED_PARTY_SETS: Dict[str, str] = {
@@ -1005,9 +949,6 @@ def apply_party_buffs(
     # =====================================================
     BA = float(stats.get("party_buff_amp_total", stats.get("buff_amp", 0.0)))
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
-
-    buff_scale = 1.0 + BA
-    debuff_scale = 1.0 + DA
 
     # =====================================================
     # (B) 실제 세트효과 적용: 스케일 "미적용"
@@ -1220,41 +1161,44 @@ def apply_party_buffs(
 # =====================================================
 # 10) 공통: 딜 공식 / 요약 스탯
 # =====================================================
-
 def base_damage_only(stats: Dict[str, float]) -> float:
-    # 치확 = (장비스탯 치확) + (버프 치확)
-    promo_cr_mult = float(stats.get("promo_crit_rate_mult", 1.0))
-    promo_ap_mult = float(stats.get("promo_armor_pen_mult", 1.0))
-
+    # -----------------------------
+    # [1] 치확 = (장비스탯 치확) + (버프 치확)
+    # -----------------------------
     cr = clamp(
-        (float(stats.get("crit_rate", 0.0)) * promo_cr_mult) + float(stats.get("buff_crit_rate_raw", 0.0)),
+        float(stats.get("crit_rate", 0.0)) + float(stats.get("buff_crit_rate_raw", 0.0)),
         0.0, 1.0
     )
 
+    # -----------------------------
+    # [2] 방어력 관통 = (기본 방관) + (버프 방관)
+    # -----------------------------
     armor_pen = clamp(
-        (float(stats.get("armor_pen", 0.0)) + float(stats.get("buff_armor_pen_raw", 0.0))) * promo_ap_mult,
+        float(stats.get("armor_pen", 0.0)) + float(stats.get("buff_armor_pen_raw", 0.0)),
         0.0, 0.8
     )
-    # 치피 = base + 버프치피
+
+    # -----------------------------
+    # [3] 치피 = base + 버프치피
+    # -----------------------------
     cd_base = float(stats.get("crit_dmg", 1.0))
-    cd = max(1.0, cd_base + float(stats.get("buff_crit_dmg_raw", 0.0)))
+    cd = max(1.0, cd_base + float(stats.get("buff_crit_dmg_raw", 0.0)))  # (참고) 아래 crit_mult 계산엔 cd_base를 씀
 
-    # [A] 장비 공격력(Flat): base_atk + equip_atk_flat
+    # -----------------------------
+    # [4] 공격력(Flat): OA / 속성공(Flat): EA
+    # -----------------------------
     OA = float(stats.get("base_atk", 0.0)) + float(stats.get("equip_atk_flat", 0.0))
-
-    # [B] 속성 공격력(별도 축)
     EA = float(stats.get("base_elem_atk", 0.0)) + float(stats.get("elem_atk", 0.0))
 
-    # [C+D] 공퍼 축 (자체)와 (파티버프) 분리 후 곱
-    promo_atk_mult = float(stats.get("promo_atk_pct_mult", 1.0))
-
+    # -----------------------------
+    # [5] 공퍼 축: 자체 공퍼 + 파티 공퍼 버프
+    # -----------------------------
     self_atk_pct_add = (
         float(stats.get("base_atk_pct", 0.0)) +
         float(stats.get("atk_pct", 0.0))
     )
     party_atk_pct_buff = float(stats.get("buff_atk_pct_raw", 0.0))
 
-    # 공퍼 스태킹: ADD(가산) 또는 MUL(기존 곱)
     if globals().get("ATK_PCT_STACKING_MODE", "ADD") == "MUL":
         # (1 + 자체공퍼) * (1 + 파티공퍼버프)
         atk_mult = (1.0 + self_atk_pct_add) * (1.0 + party_atk_pct_buff)
@@ -1262,48 +1206,50 @@ def base_damage_only(stats: Dict[str, float]) -> float:
         # (1 + 자체공퍼 + 파티공퍼버프)
         atk_mult = (1.0 + self_atk_pct_add + party_atk_pct_buff)
 
-    # 승급 배율(곱)
-    atk_mult *= promo_atk_mult
-
     # 진짜 곱연산 공격력 버프(있으면)
     atk_mult *= float(stats.get("buff_atk_mult", 1.0))
 
-    # [E] 최종공
+    # -----------------------------
+    # [6] 최종공 (별도 축)
+    # -----------------------------
     final_atk = 1.0 + float(stats.get("final_atk_mult", 0.0))
 
-    # [F] 치명 배율
+    # -----------------------------
+    # [7] 치명 배율
+    #  - 기대값: 1 + 치확 * (총치피배율-1)
+    # -----------------------------
     cd_mult = max(1.0, cd_base + float(stats.get("buff_crit_dmg_raw", 0.0)))
-    cd_add  = cd_mult - 1.0
-    crit_mult = 1.0 + cr * cd_add
+    crit_mult = 1.0 + cr * (cd_mult - 1.0)
 
     # -----------------------------
-    # 디버프증폭 적용: 방깎/내성깎만
+    # [8] 디버프증폭 적용: "내성감소"만
+    #  - 방깎(def_reduction)은 디버프증폭 미적용
     # -----------------------------
     DA = float(stats.get("party_debuff_amp_total", stats.get("debuff_amp", 0.0)))
     debuff_scale = 1.0 + DA
 
-    def_reduction = clamp(float(stats.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
+    def_reduction = clamp(float(stats.get("def_reduction_raw", 0.0)), 0.0, 0.95)
 
     # 방어 배율: 1 / (1 + K*(1-방관)*(1-방깎))
     defense_mult = 1.0 / (1.0 + DEFENSE_K * (1.0 - armor_pen) * (1.0 - def_reduction))
 
-    # 속성 내성 배율: (1 - 내성 + 내성감소)
+    # 속성 내성 배율: (1 - (내성 - 내성감소))
     boss_resist = float(stats.get("boss_elem_resist", 0.0))
     res_red = float(stats.get("elem_res_reduction_raw", 0.0)) * debuff_scale
     eff_resist = clamp(boss_resist - res_red, -0.95, 0.95)
     elem_res_mult = 1.0 - eff_resist
 
-    # 속피(장비/스탯 + 버프속피)
+    # -----------------------------
+    # [9] 속피(장비/스탯 + 버프속피)
+    # -----------------------------
     all_elem_dmg_total = float(stats.get("all_elem_dmg", 0.0)) + float(stats.get("buff_all_elem_dmg_raw", 0.0))
 
-    # 피해량 / 최종피해
+    # -----------------------------
+    # [10] 피해량 / 최종피해 / 추천속성 / 받피증
+    # -----------------------------
     dmg_bonus = float(stats.get("dmg_bonus", 0.0))
     final_dmg = float(stats.get("final_dmg", 0.0))
-
-    # 추천 속성 배율
     recommended_mult = float(stats.get("recommended_mult", 1.0))
-
-    promo_final_mult = float(stats.get("promo_final_dmg_mult", 1.0))
 
     dmg_taken_inc = float(stats.get("dmg_taken_inc", 0.0))
     taken_mult = 1.0 + dmg_taken_inc
@@ -1318,7 +1264,6 @@ def base_damage_only(stats: Dict[str, float]) -> float:
         * crit_mult
         * (1.0 + dmg_bonus)
         * (1.0 + final_dmg)
-        * promo_final_mult
         * recommended_mult
         * taken_mult
     )
@@ -1368,7 +1313,7 @@ def summarize_effective_stats(stats: Dict[str, float]) -> Dict[str, Dict[str, fl
     DA = float(s.get("party_debuff_amp_total", s.get("debuff_amp", 0.0)))
     debuff_scale = 1.0 + DA
 
-    eff_def_red      = clamp(float(s.get("def_reduction_raw", 0.0)) * debuff_scale, 0.0, 0.95)
+    eff_def_red      = clamp(float(s.get("def_reduction_raw", 0.0)), 0.0, 0.95)
     eff_elem_res_red = float(s.get("elem_res_reduction_raw", 0.0)) * debuff_scale
     eff_mark_res_red = float(s.get("mark_res_reduction_raw", 0.0)) * debuff_scale
 
@@ -1804,10 +1749,6 @@ def is_valid_by_caps(stats: Dict[str, float]) -> bool:
 
 # =====================================================
 # Cookie Simulator (Abyss Raid) - Crit 100% Forced Optimizers
-#  - [A] 윈드파라거스: crit_rate 설유 자동배정(100% 맞춤) + crit_rate 축 탐색 제거
-#  - [B] 멜랑크림:    crit_rate 설유 자동배정(100% 맞춤) + crit_rate 축 탐색 제거 + FAST 사이클
-#  - [C] 이슬맛:      보호막 최적화(정확 전수조사) + DPS 사이클
-#  - [D] 흑보리맛:    crit_rate 설유 자동배정(100% 맞춤) + crit_rate 축 탐색 제거 + FAST 이벤트
 # =====================================================
 # =====================================================
 # 0) 공용 유틸
