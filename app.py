@@ -7,26 +7,6 @@ import cookie_simulator as sim
 st.set_page_config(page_title="THE ABYSS COOKIE LAB", layout="wide")
 STEP_FIXED = 2
 
-def render_table_card(title: str, rows: list[tuple[str, str]]):
-    if not rows:
-        return False
-
-    with st.container(border=True):
-        st.markdown(f'<div class="h-title">{title}</div>', unsafe_allow_html=True)
-        df = pd.DataFrame(rows, columns=["항목", "값"])
-        st.dataframe(df, use_container_width=True, hide_index=True)
-    return True
-
-def render_cards_flow(cards, per_row=3):
-    i = 0
-    while i < len(cards):
-        chunk = cards[i:i+per_row]
-        cols = st.columns(len(chunk), gap="small")
-        for col, render_fn in zip(cols, chunk):
-            with col:
-                render_fn()
-        i += per_row
-
 st.markdown(
 """
 <style>
@@ -618,19 +598,11 @@ thead tr th{ border-bottom: 2px solid rgba(255,52,52,0.18) !important; }
 unsafe_allow_html=True,
 )
 
-import time
-import html as _html
-import streamlit as st
-import pandas as pd
-import cookie_simulator as sim
-
-
 # =====================================================
 # 유틸: 한글 매핑
 # =====================================================
 def _kr_or_key(mapping: dict, k: str) -> str:
     return mapping.get(k, k)
-
 
 # =====================================================
 # 파티 슬롯 selectbox 기본값 1회만 넣기
@@ -642,11 +614,6 @@ def init_once(key: str, value):
     st.session_state[key] = value
     st.session_state[flag] = True
 
-
-def norm_none(x: str) -> str:
-    return "" if (x is None or x == "없음") else x
-
-
 # =====================================================
 # 유틸: DF -> HTML Table (n컬럼 지원, tooltip 포함)
 # =====================================================
@@ -655,7 +622,6 @@ def hide_breeder_when_not_wind(cookie_name: str, options: list[str]) -> list[str
     if cookie_name == "윈드파라거스 쿠키":
         return options
     return [x for x in options if "믿음직한 브리더" not in str(x)]
-
 
 def df_to_html_table(
     df: pd.DataFrame,
@@ -707,7 +673,6 @@ def df_to_html_table(
 </table>
 """.strip()
 
-
 def render_labeled_table(
     title: str,
     df: pd.DataFrame,
@@ -731,7 +696,6 @@ def render_labeled_table(
 
     st.markdown(html, unsafe_allow_html=True)
 
-
 # =====================================================
 # 최종스탯 grid 전용: HTML 생성/렌더
 # =====================================================
@@ -742,7 +706,6 @@ def labeled_table_html(title: str, df: pd.DataFrame, small: bool = False, col_ra
     else:
         body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
-
 
 def labeled_table_html_optional(
     title: str,
@@ -757,7 +720,6 @@ def labeled_table_html_optional(
     pill = f'<div class="stat-pill">{_html.escape(title)}</div>'
     body = df_to_html_table(df, small=small, col_ratio=col_ratio, col_widths=col_widths)
     return f'<div class="stat-wrap">{pill}{body}</div>'
-
 
 def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_df):
     items = []
@@ -777,7 +739,6 @@ def render_final_stats_grid(atk_df, crit_df, common_df, skill_df, surv_df, amp_d
     html = "<div class='stat-grid'>" + "".join(items) + "</div>"
     st.markdown(html, unsafe_allow_html=True)
 
-
 # =====================================================
 # 요약표(잠재/조각)
 # =====================================================
@@ -792,7 +753,6 @@ def pretty_potentials(pot: dict) -> pd.DataFrame:
             rows.append({"항목": _kr_or_key(getattr(sim, "POTENTIAL_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
 
-
 def pretty_shards(shards: dict) -> pd.DataFrame:
     rows = []
     for k, v in (shards or {}).items():
@@ -803,7 +763,6 @@ def pretty_shards(shards: dict) -> pd.DataFrame:
         if iv >= 1:
             rows.append({"항목": _kr_or_key(getattr(sim, "SHARD_KR", {}), k), "값": iv})
     return pd.DataFrame(rows, columns=["항목", "값"])
-
 
 # =====================================================
 # 사이클 breakdown 표 (비율 포함)
@@ -842,7 +801,6 @@ def cycle_breakdown_df(cb: dict) -> pd.DataFrame:
         pct = fv / total * 100.0
         out.append({"항목": label, "딜": f"{fv:,.4f}", "비율(%)": f"{pct:.2f}"})
     return pd.DataFrame(out, columns=["항목", "딜", "비율(%)"])
-
 
 # =====================================================
 # 최종스탯 그룹 (0인 항목 제거)
@@ -1011,10 +969,8 @@ def build_stat_tables(stats: dict, cookie_name: str = "", party=None):
 def mode_key(kind: str) -> str:
     return f"mode_widget__{kind}"
 
-
 def equip_key(kind: str) -> str:
     return f"equip_widget__{kind}"
-
 
 # =====================================================
 # 세션 상태 (쿠키별 widget key 분리)
@@ -1040,7 +996,6 @@ if "equip" not in st.session_state:
 if "_cookie_prev" not in st.session_state:
     st.session_state._cookie_prev = st.session_state.cookie
 
-
 def kind_of(cookie_name: str) -> str:
     return {
         "윈드파라거스 쿠키": "wind",
@@ -1050,18 +1005,14 @@ def kind_of(cookie_name: str) -> str:
         "샬롯맛 쿠키": "char",
     }.get(cookie_name, "char")
 
-
 def seaz_key(kind: str) -> str:
     return f"seaz_widget__{kind}"
-
 
 def party1_key(kind: str) -> str:
     return f"party_slot1__{kind}"
 
-
 def party2_key(kind: str) -> str:
     return f"party_slot2__{kind}"
-
 
 # =====================================================
 # 상단 타이틀
@@ -1072,7 +1023,6 @@ st.markdown("""
   <div class="h-sub">쿠키 선택 → 장비 선택 모드/장비 선택 → 시즈나이트/파티 구성 → 실행</div>
 </div>
 """, unsafe_allow_html=True)
-
 
 # =====================================================
 # 레이아웃: 좌/우
@@ -1156,8 +1106,6 @@ with st.container(key="outer_shell", border=False):
             )
             st.session_state.mode = mode
 
-            equip_override = None  # 기본
-
             # =====================================================
             # 1) 이슬: 해적셋 고정
             # =====================================================
@@ -1168,7 +1116,6 @@ with st.container(key="outer_shell", border=False):
                     st.session_state[ek] = fixed_opts[0]
 
                 st.session_state.equip = fixed_opts[0]
-                equip_override = fixed_opts[0]
 
                 if mode == "선택(수동)":
                     st.markdown('<div class="ctl-label">장비</div>', unsafe_allow_html=True)
@@ -1202,7 +1149,6 @@ with st.container(key="outer_shell", border=False):
                     equip = st.session_state.get(ek, charlotte_opts[0])
 
                 st.session_state.equip = equip
-                equip_override = equip
 
             # =====================================================
             # 3) 나머지: 기존 로직 (수동이면 선택, 자동이면 None)
@@ -1230,11 +1176,8 @@ with st.container(key="outer_shell", border=False):
                         key=ek,
                     )
                     st.session_state.equip = equip
-                    equip_override = equip
                 else:
                     st.session_state.equip = ""
-                    equip_override = None
-
 
             # =====================================================
             # 시즈나이트/파티
@@ -1408,8 +1351,9 @@ with st.container(key="outer_shell", border=False):
                 best = None
                 best_kind = None
 
-                # 수정: 수동모드가 아니어도 session_state.equip 이 있으면 override로 넘김
-                equip_override_local = st.session_state.equip or None
+                equip_override_local = None
+                if st.session_state.mode == "선택(수동)":
+                    equip_override_local = st.session_state.equip or None
 
                 if kind_cookie == "wind":
                     best = sim.optimize_wind_cycle(
@@ -1604,7 +1548,6 @@ with st.container(key="outer_shell", border=False):
 
             if st.session_state.last_run:
                 st.caption(f"실행: {st.session_state.last_run}")
-
 
 # =====================================================
 # Global note (outer_shell 밖)
