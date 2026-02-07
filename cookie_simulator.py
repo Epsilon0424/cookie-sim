@@ -339,6 +339,7 @@ PEPPER_RUBY_SUB     = {"basic_dmg": 0.30, "crit_dmg": 0.25}
 RICH_CORAL_SUB      = {"element_strike_dmg": 0.25, "special_dmg": 0.15, "ult_dmg": 0.15}
 VANILLA_MONDE_SUB   = {"passive_dmg": 0.30, "crit_dmg": 0.25}
 HERB_GREEN_SUB      = {"buff_amp": 0.20}
+MINTQUARTZ_SUB      = {"heal_pct": 0.32, "shield_pct": 0.32}
 
 SEAZNITES = {
     "페퍼루비:믿음직한 브리더": {"passive": {"ally_all_elem_dmg": 0.15, "element_strike_dmg": 0.75}, "sub": PEPPER_RUBY_SUB},
@@ -364,6 +365,10 @@ SEAZNITES = {
     "허브그린드:백마법사의 의지": {"passive": {"atk_pct": 0.125, "ally_all_elem_dmg": 0.15}, "sub": HERB_GREEN_SUB},
     "허브그린드:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45}, "sub": HERB_GREEN_SUB},
     "허브그린드:가벼운 손길": {"passive": {"heal_pct": 0.16, "atk_spd": 0.10, "final_dmg": 0.20}, "sub": HERB_GREEN_SUB},
+
+    "민트쿼츠:작은성배": {"passive": {"heal_pct": 0.16, "ally_all_elem_dmg": 0.45}, "sub": MINTQUARTZ_SUB},
+    "민트쿼츠:백마법사의 의지": {"passive": {"atk_pct": 0.125, "ally_all_elem_dmg": 0.15}, "sub": MINTQUARTZ_SUB},
+    "민트쿼츠:가벼운 손길": {"passive": {"heal_pct": 0.16, "atk_spd": 0.10, "final_dmg": 0.20}, "sub": MINTQUARTZ_SUB},
 }
 
 # =====================================================
@@ -1927,8 +1932,8 @@ def wind_allowed_uniques() -> List[str]:
 def wind_allowed_potentials() -> List[Dict[str, int]]:
     return [{
         "debuff_amp": 4,
-        "crit_rate": 1,
-        "atk_pct": 1,
+        "crit_rate": 2,
+        "atk_pct": 0,
         "elem_atk": 2,
         "crit_dmg": 0,
         "armor_pen": 0,
