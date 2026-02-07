@@ -1292,8 +1292,8 @@ with st.container(key="outer_shell", border=False):
                     or [""]
                 )
 
-                # 2) 허브그린드만 노출
-                seaz_options = [x for x in all_opts if str(x).startswith("허브그린드:")]
+                # 2) 허브그린드, 민트쿼츠만 노출
+                seaz_options = [x for x in all_opts if str(x).startswith("허브그린드:") or str(x).startswith("민트쿼츠:")]
 
                 # 3) 혹시 비면(데이터 없을 때) 기본값 후보를 만들어 둠
                 if not seaz_options:
